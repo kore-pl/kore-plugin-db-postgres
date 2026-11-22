@@ -6,13 +6,13 @@ import (
 	"github.com/pengtang1024/kore/pkg/pluginapi"
 )
 
-// connectionsParams 是 pg.connections 的显式入参形状。
+// connectionsParams 是 db-postgres.connections 的显式入参形状。
 type connectionsParams struct {
 	Instance string `json:"instance"`
 	Database string `json:"database"`
 }
 
-// ConnectionsResult 是 pg.connections 的结构化结果（不含任何口令字段）。
+// ConnectionsResult 是 db-postgres.connections 的结构化结果（不含任何口令字段）。
 type ConnectionsResult struct {
 	Scope       string       `json:"scope"`
 	Instance    string       `json:"instance"`
@@ -22,7 +22,7 @@ type ConnectionsResult struct {
 	Applied     bool         `json:"applied"`
 }
 
-// callConnections 处理 pg.connections：校验作用域与必填 instance 后返回连接列表占位。
+// callConnections 处理 db-postgres.connections：校验作用域与必填 instance 后返回连接列表占位。
 func callConnections(raw json.RawMessage, scope string, exec Executor) (json.RawMessage, *pluginapi.Error) {
 	if perr := validateScope(scope); perr != nil {
 		return nil, perr

@@ -28,10 +28,10 @@ func TestCallNoFault(t *testing.T) {
 		params string
 		want   string
 	}{
-		{"pg.instances", `{}`, `"count":0`},
-		{"instances", `{"filter":"main"}`, `"applied":false`},
-		{"pg.connections", `{"instance":"main"}`, `"instance":"main"`},
-		{"connections", `{"instance":"main","database":"app"}`, `"database":"app"`},
+		{"db-postgres.instances", `{}`, `"count":0`},
+		{"db-postgres.instances", `{"filter":"main"}`, `"applied":false`},
+		{"db-postgres.connections", `{"instance":"main"}`, `"instance":"main"`},
+		{"db-postgres.connections", `{"instance":"main","database":"app"}`, `"database":"app"`},
 	}
 	for _, c := range cases {
 		result, perr := Call(c.method, json.RawMessage(c.params), testScope, nil)
@@ -44,6 +44,22 @@ func TestCallNoFault(t *testing.T) {
 	}
 }
 
+// TestBusinessVerb 方法名归一化：只接受 db-postgres.<verb>，域不符或裸动词一律拒绝。
+func TestBusinessVerb(t *testing.T) {
+	for _, verb := range []string{"instances", "connections"} {
+		method := "db-postgres." + verb
+		got, ok := businessVerb(method)
+		if !ok || got != verb {
+			t.Fatalf("businessVerb(%q)=(%q,%v)，期望 (%q,true)", method, got, ok, verb)
+		}
+	}
+	for _, method := range []string{"pg.instances", "instances", "db-postgres.exec", "db-postgres."} {
+		if _, ok := businessVerb(method); ok {
+			t.Fatalf("businessVerb(%q) 不应被接受", method)
+		}
+	}
+}
+
 // TestCallInvalid 参数校验：非法逻辑名 / 缺必填 / 作用域穿越均返回 E_INVALID。
 func TestCallInvalid(t *testing.T) {
 	cases := []struct {
@@ -51,10 +67,10 @@ func TestCallInvalid(t *testing.T) {
 		params string
 		scope  string
 	}{
-		{"pg.instances", `{"filter":"../etc"}`, testScope},
-		{"pg.connections", `{}`, testScope},
-		{"pg.connections", `{"instance":"Bad Name"}`, testScope},
-		{"pg.instances", `{}`, "/var/lib/../escape"},
+		{"db-postgres.instances", `{"filter":"../etc"}`, testScope},
+		{"db-postgres.connections", `{}`, testScope},
+		{"db-postgres.connections", `{"instance":"Bad Name"}`, testScope},
+		{"db-postgres.instances", `{}`, "/var/lib/../escape"},
 	}
 	for _, c := range cases {
 		result, perr := Call(c.method, json.RawMessage(c.params), c.scope, nil)
@@ -80,8 +96,8 @@ func TestCallFault(t *testing.T) {
 		method string
 		params string
 	}{
-		{"pg.instances", `{}`},
-		{"pg.connections", `{"instance":"main"}`},
+		{"db-postgres.instances", `{}`},
+		{"db-postgres.connections", `{"instance":"main"}`},
 	}
 	for _, c := range cases {
 		for _, m := range methods {
@@ -101,7 +117,7 @@ func TestCallFault(t *testing.T) {
 
 // TestCallUnknown 未知方法返回 E_NOTFOUND。
 func TestCallUnknown(t *testing.T) {
-	_, perr := Call("pg.exec", json.RawMessage(`{}`), testScope, nil)
+	_, perr := Call("db-postgres.exec", json.RawMessage(`{}`), testScope, nil)
 	if perr == nil || perr.Code != pluginapi.E_NOTFOUND {
 		t.Fatalf("错误=%v，期望 E_NOTFOUND", perr)
 	}

@@ -8,13 +8,13 @@ PostgreSQL 管理插件（**骨架**）：覆盖 PostgreSQL 实例 / 连接管�
 
 - `kore.plugin.v1`，`lifecycle=lazy`，`depth_level=basic`
 - 能力声明：`system:admin`
-- 方法：`pg.instances` / `pg.connections`（同时接受裸 `instances` / `connections`）
+- 方法：`db-postgres.instances` / `db-postgres.connections`（域必须等于插件 id `db-postgres`，PLUGIN-PROTOCOL §7.2；不接受裸动词或旧 `pg.` 前缀，v0.1.0 无存量用户不做兼容层）
 - 握手的 stdout 留给协议帧，日志一律写 stderr
 
 ## 方法参数（骨架口径）
 
-- `pg.instances`：`{"filter":"<逻辑名>"}` —— filter 可省略；非空时须为合法逻辑名
-- `pg.connections`：`{"instance":"<逻辑名>","database":"<逻辑名>"}` —— instance 必填，database 可选
+- `db-postgres.instances`：`{"filter":"<逻辑名>"}` —— filter 可省略；非空时须为合法逻辑名
+- `db-postgres.connections`：`{"instance":"<逻辑名>","database":"<逻辑名>"}` —— instance 必填，database 可选
 - 逻辑名规则：`[a-z0-9_-]`，长度 1..128；拒绝空、大写、空格、路径段与注入字符
 - 作用域由 `KORE_PG_SCOPE` 提供，缺省 `/var/lib/kore/db-postgres`；只做字符串校验，**不连接数据库、不读配置、不落盘**
 

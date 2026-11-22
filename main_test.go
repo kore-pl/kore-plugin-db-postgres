@@ -143,8 +143,8 @@ func TestServeMethods(t *testing.T) {
 			t.Fatalf("%s 意外错误: %v", method, resp.Error)
 		}
 	}
-	write("a", "pg.instances", `{}`)
-	write("b", "pg.connections", `{"instance":"main"}`)
+	write("a", "db-postgres.instances", `{}`)
+	write("b", "db-postgres.connections", `{"instance":"main"}`)
 
 	// 收尾 shutdown 也配对读帧。
 	write("c", "kore.shutdown", `{}`)

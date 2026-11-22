@@ -15,10 +15,10 @@ func TestDispatchMethods(t *testing.T) {
 		params string
 		want   string
 	}{
-		{"pg.instances", `{}`, `"count":0`},
-		{"pg.instances", `{"filter":"main"}`, `"applied":false`},
-		{"pg.connections", `{"instance":"main"}`, `"instance":"main"`},
-		{"pg.connections", `{"instance":"main","database":"app"}`, `"database":"app"`},
+		{"db-postgres.instances", `{}`, `"count":0`},
+		{"db-postgres.instances", `{"filter":"main"}`, `"applied":false`},
+		{"db-postgres.connections", `{"instance":"main"}`, `"instance":"main"`},
+		{"db-postgres.connections", `{"instance":"main","database":"app"}`, `"database":"app"`},
 	}
 	for _, c := range cases {
 		req := &pluginapi.Request{
@@ -45,10 +45,10 @@ func TestDispatchReject(t *testing.T) {
 		params string
 		code   string
 	}{
-		{"pg.instances", `{"filter":"../etc"}`, pluginapi.E_INVALID},
-		{"pg.connections", `{}`, pluginapi.E_INVALID},
-		{"pg.connections", `{"instance":"Bad Name"}`, pluginapi.E_INVALID},
-		{"pg.exec", `{}`, pluginapi.E_NOTFOUND},
+		{"db-postgres.instances", `{"filter":"../etc"}`, pluginapi.E_INVALID},
+		{"db-postgres.connections", `{}`, pluginapi.E_INVALID},
+		{"db-postgres.connections", `{"instance":"Bad Name"}`, pluginapi.E_INVALID},
+		{"db-postgres.exec", `{}`, pluginapi.E_NOTFOUND},
 	}
 	for _, c := range cases {
 		req := &pluginapi.Request{

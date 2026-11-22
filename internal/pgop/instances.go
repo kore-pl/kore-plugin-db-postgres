@@ -6,12 +6,12 @@ import (
 	"github.com/pengtang1024/kore/pkg/pluginapi"
 )
 
-// instancesParams 是 pg.instances 的显式入参形状。
+// instancesParams 是 db-postgres.instances 的显式入参形状。
 type instancesParams struct {
 	Filter string `json:"filter"`
 }
 
-// InstancesResult 是 pg.instances 的结构化结果。
+// InstancesResult 是 db-postgres.instances 的结构化结果。
 type InstancesResult struct {
 	Scope     string     `json:"scope"`
 	Instances []Instance `json:"instances"`
@@ -19,7 +19,7 @@ type InstancesResult struct {
 	Applied   bool       `json:"applied"`
 }
 
-// callInstances 处理 pg.instances：校验作用域与 filter 后返回实例列表占位。
+// callInstances 处理 db-postgres.instances：校验作用域与 filter 后返回实例列表占位。
 func callInstances(raw json.RawMessage, scope string, exec Executor) (json.RawMessage, *pluginapi.Error) {
 	if perr := validateScope(scope); perr != nil {
 		return nil, perr
