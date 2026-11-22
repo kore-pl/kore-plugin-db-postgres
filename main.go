@@ -1,7 +1,8 @@
-// Package main 是 kore 的 db-postgres 插件：PostgreSQL 管理的方法面骨架。
+// Package main 是 kore 的 db-postgres 插件：PostgreSQL 日常管理方法面。
 //
-// db-postgres 只做协议握手 + 参数校验 + 结构化结果，不真连接数据库、
-// 不内置 psql / pg_dump 等任何工具二进制（裁决37 / 提案 §2.1 批2）。
+// 能力面：连接配置契约（config.get/set）、实例连通性探测、库列表（含大小）、
+// 只读 SQL 查询、状态指标。实现方式是调用宿主机 psql 子进程（不引入 driver），
+// 不内置任何数据库客户端二进制；本机没有 psql 时回退到 docker exec 容器内 psql。
 //
 // 协议面（kore.plugin.v1）：UDS → kore.hello 握手 → 会话循环读 request、
 // 按 method 分发并回 response；stdout 留给协议，日志一律写 stderr。
@@ -38,5 +39,5 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	logger.Info("hello 完成", "plugin_id", cfg.id, "version", cfg.version)
-	return serve(conn, cfg, logger)
+	return serve(conn, &cfg, logger)
 }

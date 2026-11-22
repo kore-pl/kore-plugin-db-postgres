@@ -6,21 +6,33 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/pengtang1024/kore-plugin-db-postgres/internal/pgop"
+	"github.com/pengtang1024/kore-plugin-db-postgres/internal/plugincfg"
 	"github.com/pengtang1024/kore/pkg/pluginapi"
 )
 
-// testConfig 构造握手与会话循环共用的一致配置（不依赖环境变量）。
-func testConfig() config {
-	return config{
+// testConfig 构造握手与会话循环共用的一致配置（状态目录落 t.TempDir）。
+func testConfig(t *testing.T) *config {
+	t.Helper()
+	dir := t.TempDir()
+	values := defaultValues()
+	return &config{
 		id:           "db-postgres",
-		version:      "0.1.0",
+		version:      "0.2.0",
 		requiresKore: ">=0.1.0 <0.2.0",
 		capabilities: []string{"system:admin"},
-		scope:        "/var/lib/kore/db-postgres",
 		startedAt:    time.Now(),
+		stateDir:     dir,
+		store:        plugincfg.NewStore(dir),
+		values:       values,
+		source:       plugincfg.SourceDefault,
+		pg: pgop.Config{
+			Instances: buildInstances(values, true, nil),
+		},
 	}
 }
 
@@ -65,7 +77,7 @@ func TestHandshake(t *testing.T) {
 	pluginConn, kernelConn := net.Pipe()
 	defer func() { _ = kernelConn.Close() }()
 	done := make(chan error, 1)
-	go func() { done <- handshake(pluginConn, testConfig()); _ = pluginConn.Close() }()
+	go func() { done <- handshake(pluginConn, *testConfig(t)); _ = pluginConn.Close() }()
 
 	request := readRequest(t, kernelConn)
 	if request.Method != helloMethod {
@@ -78,7 +90,7 @@ func TestHandshake(t *testing.T) {
 	if params.PluginID != "db-postgres" || params.ID != "db-postgres" {
 		t.Fatalf("plugin_id/id=%q/%q，期望 db-postgres", params.PluginID, params.ID)
 	}
-	if params.Protocol != pluginapi.Protocol || params.Version != "0.1.0" {
+	if params.Protocol != pluginapi.Protocol || params.Version != "0.2.0" {
 		t.Fatalf("protocol/version=%q/%q 不符合 §5", params.Protocol, params.Version)
 	}
 	if params.PID != os.Getpid() {
@@ -100,7 +112,7 @@ func TestServeShutdown(t *testing.T) {
 	pluginConn, kernelConn := net.Pipe()
 	defer func() { _ = kernelConn.Close() }()
 	done := make(chan error, 1)
-	go func() { done <- serve(pluginConn, testConfig(), testLogger()); _ = pluginConn.Close() }()
+	go func() { done <- serve(pluginConn, testConfig(t), testLogger()); _ = pluginConn.Close() }()
 
 	request := &pluginapi.Request{
 		Type: pluginapi.TypeRequest, ID: "id-1", ReqID: "r-1", Method: "kore.shutdown",
@@ -118,14 +130,14 @@ func TestServeShutdown(t *testing.T) {
 	}
 }
 
-// TestServeMethods 会话循环处理方法调用并回帧（同样配对读响应，避免无缓冲死锁）。
+// TestServeMethods 会话循环上真实走一遍配置契约与只读白名单（不依赖数据库）。
 func TestServeMethods(t *testing.T) {
 	pluginConn, kernelConn := net.Pipe()
 	defer func() { _ = kernelConn.Close() }()
 	done := make(chan error, 1)
-	go func() { done <- serve(pluginConn, testConfig(), testLogger()); _ = pluginConn.Close() }()
+	go func() { done <- serve(pluginConn, testConfig(t), testLogger()); _ = pluginConn.Close() }()
 
-	write := func(id, method, params string) {
+	write := func(id, method, params string, wantErr string) {
 		t.Helper()
 		req := &pluginapi.Request{
 			Type: pluginapi.TypeRequest, ID: id, ReqID: "r-" + id,
@@ -139,16 +151,50 @@ func TestServeMethods(t *testing.T) {
 		if !ok || resp.ID != id {
 			t.Fatalf("响应帧异常: %+v", env)
 		}
-		if resp.Error != nil {
-			t.Fatalf("%s 意外错误: %v", method, resp.Error)
+		if wantErr == "" {
+			if resp.Error != nil {
+				t.Fatalf("%s 意外错误: %v", method, resp.Error)
+			}
+			return
+		}
+		if resp.Error == nil || resp.Error.Code != wantErr {
+			t.Fatalf("%s 错误=%v，期望 %s", method, resp.Error, wantErr)
 		}
 	}
-	write("a", "db-postgres.instances", `{}`)
-	write("b", "db-postgres.connections", `{"instance":"main"}`)
+	write("a", "db-postgres.config.get", `{}`, "")
+	write("b", "db-postgres.query", `{"instance":"default","sql":"DROP TABLE x"}`, pluginapi.E_INVALID)
+	write("c", "db-postgres.exec", `{}`, pluginapi.E_NOTFOUND)
 
 	// 收尾 shutdown 也配对读帧。
-	write("c", "kore.shutdown", `{}`)
+	write("d", "kore.shutdown", `{}`, "")
 	if err := <-done; err != nil {
 		t.Fatalf("serve 返回错误: %v", err)
+	}
+}
+
+// TestConfigFileMode0600 配置落盘后必须是 0600（密码只存在本机私密文件里）。
+// 状态目录由内核负责创建并保持 0700；插件只在目录缺失时按 0700 补建。
+func TestConfigFileMode0600(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.stateDir = filepath.Join(t.TempDir(), "plugins", "db-postgres")
+	cfg.store = plugincfg.NewStore(cfg.stateDir)
+	params := json.RawMessage(`{"values":{"host":"127.0.0.1","port":15432,"user":"postgres","password":"pw-for-mode"}}`)
+	if _, perr := handleConfigSet(params, cfg); perr != nil {
+		t.Fatalf("保存配置失败: %v", perr)
+	}
+	path := filepath.Join(cfg.stateDir, "config.json")
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat 配置失败: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("配置文件权限=%o，期望 600", perm)
+	}
+	dirInfo, err := os.Stat(cfg.stateDir)
+	if err != nil {
+		t.Fatalf("stat 状态目录失败: %v", err)
+	}
+	if perm := dirInfo.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("状态目录权限=%o，期望 700", perm)
 	}
 }
