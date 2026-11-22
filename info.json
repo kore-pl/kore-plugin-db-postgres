@@ -13,5 +13,5 @@
   "depends_on": [],
   "conflicts": ["db-mysql"],
   "scenario_tags": ["data"],
-  "size_bytes": 0
+  "size_bytes": 1264387
 }
