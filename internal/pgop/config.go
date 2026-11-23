@@ -215,17 +215,46 @@ func normalizeInstance(ic *InstanceConfig) error {
 	return nil
 }
 
-// instancePassword 优先使用配置契约直接保存的密码（仅默认实例），否则从实例声明的
-// 环境变量读取。
+const (
+	// KernelPasswordEnv 是内核按 ADR-0026 注入的凭据环境变量；存在即优先于插件 config 口令。
+	KernelPasswordEnv = "PGPASSWORD"
+	// CredentialSourceKernelEnv / PluginConfig / None 是对外诊断字段 credential_source 的三态。
+	CredentialSourceKernelEnv    = "kernel_env"
+	CredentialSourcePluginConfig = "plugin_config"
+	CredentialSourceNone         = "none"
+)
+
+// readConfigPassword 是读取插件配置口令的唯一入口；单测可替换并计数，
+// 用来断言「内核注入 env 存在时零次读取 config 口令」。
+var readConfigPassword = func(ic InstanceConfig) string { return ic.Password }
+
+// resolveCredential 返回连接口令与来源（ADR-0026 / §3.5 #8）：
+//   - kernel_env：默认实例 + 内核注入的 PGPASSWORD 存在 → 直接用，**不再读 config 口令**；
+//   - plugin_config：env 缺失时回落插件 config（password 或 password_env），向后兼容；
+//   - none：两者都没有（PostgreSQL 本机常见 trust/peer 认证，空口令是合法配置）。
 //
-// 两者都没有时返回空串而不是报错：PostgreSQL 本机常见 trust / peer 认证，没有密码是
-// 合法配置；真正的认证失败由服务端回 E_UPSTREAM，信息比「密码环境变量未设置」更准。
+// 内核注入只作用于默认实例：多实例的其它实例各有自己的 config 口令，避免把默认实例的
+// 凭据误发给别的数据库。
+func resolveCredential(ic InstanceConfig) (string, string) {
+	if ic.Name == DefaultInstanceName {
+		if password, ok := os.LookupEnv(KernelPasswordEnv); ok && password != "" {
+			return password, CredentialSourceKernelEnv
+		}
+	}
+	if password := readConfigPassword(ic); password != "" {
+		return password, CredentialSourcePluginConfig
+	}
+	if ic.PasswordEnv != "" && ic.PasswordEnv != KernelPasswordEnv {
+		if password, ok := os.LookupEnv(ic.PasswordEnv); ok && password != "" {
+			return password, CredentialSourcePluginConfig
+		}
+	}
+	return "", CredentialSourceNone
+}
+
+// instancePassword 沿用旧签名：没有口令时返回空串而不是报错（trust/peer 合法；
+// 真正的认证失败由服务端回 E_UPSTREAM，信息更准）。
 func instancePassword(ic InstanceConfig) string {
-	if ic.Password != "" {
-		return ic.Password
-	}
-	if ic.PasswordEnv == "" {
-		return ""
-	}
-	return os.Getenv(ic.PasswordEnv)
+	password, _ := resolveCredential(ic)
+	return password
 }

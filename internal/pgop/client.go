@@ -91,6 +91,8 @@ func (c *Client) Instances(instances []InstanceConfig) ([]InstanceStatus, error)
 // probe 做一次连通性探测并取回版本；错误文本不含密码。
 func (c *Client) probe(instance InstanceConfig) InstanceStatus {
 	status := InstanceStatus{Name: instance.Name, Host: instance.Host, Port: instance.Port}
+	// 凭据来源只报「从哪来」，绝不回显口令本身（G-30）。
+	_, status.CredentialSource = resolveCredential(instance)
 	stdout, perr := c.run(instance, "SELECT version()", c.connectTimeout())
 	if perr != nil {
 		status.Error = perr.Message

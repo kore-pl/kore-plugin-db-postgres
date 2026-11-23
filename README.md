@@ -13,7 +13,7 @@ PostgreSQL 管理插件：**真实连接**实例、列库（含大小）、执�
 | --- | --- | --- |
 | `db-postgres.config.get` | `{}` | `{schema, values, source}`；`password` 只回 `***` |
 | `db-postgres.config.set` | `{values:{...}}` | `{saved, applied, restart_required, warnings}` |
-| `db-postgres.instances` | `{instance?}` | `{instances:[{name,host,port,reachable,version,error}], count, hint?}` |
+| `db-postgres.instances` | `{instance?}` | `{instances:[{name,host,port,reachable,version,error,credential_source}], count, hint?}`（`credential_source ∈ kernel_env|plugin_config|none`，只报来源不含口令） |
 | `db-postgres.databases` | `{instance, include_system?}` | `{instance, databases:[{name,size_bytes}], count}` |
 | `db-postgres.query` | `{instance, sql, limit?}` | `{columns, rows, row_count, truncated}` |
 | `db-postgres.status` | `{instance}` | `{instance, version, connections, databases, uptime_s, cache_hit_ratio, blocks_hit, blocks_read}` |

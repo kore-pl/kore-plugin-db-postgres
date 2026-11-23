@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3 (2026-11-23)
+
+- feat: 优先采用内核注入凭据（ADR-0026 / §3.5 #8）——默认实例若存在 `PGPASSWORD` 环境变量（内核按凭据授权注入），
+  直接使用且**不再读取插件 config 口令**；缺失才回落既有 config（`password` / `password_env`），向后兼容
+- feat: `db-postgres.instances` 新增只读诊断 `credential_source ∈ kernel_env|plugin_config|none`（只报来源，不含口令）
+- security: 口令仍只经子进程环境 / 容器 stdin 传递（不进 argv / 日志 / 响应 / 落盘）；多实例的非默认实例不被默认实例的内核凭据覆盖
+
 ## 0.3.2 (2026-11-23)
 
 - feat: 慢查询分析 `db-postgres.slowlog`（只读，`system:read`）——从 `pg_stat_statements` 按 `queryid` 聚合，
