@@ -17,6 +17,7 @@ PostgreSQL 管理插件：**真实连接**实例、列库（含大小）、执�
 | `db-postgres.databases` | `{instance, include_system?}` | `{instance, databases:[{name,size_bytes}], count}` |
 | `db-postgres.query` | `{instance, sql, limit?}` | `{columns, rows, row_count, truncated}` |
 | `db-postgres.status` | `{instance}` | `{instance, version, connections, databases, uptime_s, cache_hit_ratio, blocks_hit, blocks_read}` |
+| `db-postgres.slowlog` | `{instance, schema?, min_ms?, limit?}` | `{instance, source, schema?, min_ms, limit, available, count, queries:[{schema,digest,query,executions,total_time,mean,max,rows}], warnings?, hint}` |
 
 要点：
 
@@ -25,6 +26,19 @@ PostgreSQL 管理插件：**真实连接**实例、列库（含大小）、执�
 - `databases` 的 `size_bytes` 来自 `pg_database_size(datname)`；取不到时为 `-1`（不是 0）。
 - `query` 默认返回 100 行、上限 1000 行；单格超 8 KiB 截断，行数据总量超 8 MiB 截断，都落 `truncated: true`。
 - `status` 的 `cache_hit_ratio = blocks_hit / (blocks_hit + blocks_read)`，取自 `pg_stat_database`；`connections` 取自 `pg_stat_activity`。
+
+### 慢查询（`db-postgres.slowlog`，0.3.2）
+
+只读聚合查询，数据源 `pg_stat_statements`（按 `queryid` 归并），**不读** `log_min_duration_statement` 日志文件
+（需宿主文件权限、路径不可移植）。
+
+- 入参：`instance`（必填）、`schema`（可选；PostgreSQL 下映射为**数据库名**过滤——该视图只有 `dbid`，无 schema 维度）、
+  `min_ms`（总耗时阈值，0–3600000）、`limit`（1–100，缺省 20，按 `total_exec_time` 倒序；0 视为缺省）。
+- 结果：`available` + `count` + `queries[]`（`query` 摘要、`executions`、`total_time`/`mean`/`max`（ms）、`rows` 累计行数）
+  + `hint`；坏行只记 `warnings` 并跳过，不失败整个调用。
+- 空态：扩展未安装 / 未在 `shared_preload_libraries` 预加载 / 无 `pg_stat_statements` SELECT 权限时返回
+  `available:false, count:0` + `hint`（含 `CREATE EXTENSION pg_stat_statements` 与预加载要求），**不编造数据、不报错**。
+- 凭据：沿用既有实例配置契约（`db-postgres.config.*` / `KORE_PG_PASSWORD`），密码只进子进程环境、不进 argv、不回显。
 
 ## 配置契约
 

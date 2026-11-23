@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2 (2026-11-23)
+
+- feat: 慢查询分析 `db-postgres.slowlog`（只读，`system:read`）——从 `pg_stat_statements` 按 `queryid` 聚合，
+  返回 SQL 摘要、执行次数、总/平均/最大耗时（ms）与累计行数；支持 `instance`（必填）、`schema`（可选，PG 下映射为
+  数据库名过滤）、`min_ms`（0–3600000）、`limit`（1–100，缺省 20，按总耗时倒序）
+- security: 不读 `log_min_duration_statement` 日志文件（需宿主文件权限、路径不可移植），不接受调用方 SQL；
+  扩展未安装/未预加载/无权限时返回 `available:false` + hint 空态，不编造数据、不报错
+- chore: `method_capabilities` 增加 `db-postgres.slowlog: system:read`；`tests/fault` 故障矩阵同步为 11 个方法
+
 ## 0.3.1 (2026-11-23)
 
 ### Changed
