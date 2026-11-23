@@ -12,6 +12,7 @@ import (
 // testConfig 构造一个带默认实例的执行面配置（不连接任何真实服务）。
 func testConfig() Config {
 	return Config{
+		Admin: true,
 		Instances: []InstanceConfig{
 			{Name: DefaultInstanceName, Host: "127.0.0.1", Port: 5432, User: "postgres"},
 			{Name: "primary", Host: "127.0.0.1", Port: 15432, User: "postgres"},
@@ -31,6 +32,9 @@ type fakeExec struct {
 	gotLimit  int
 	instances []InstanceConfig
 	include   bool
+	// created 是写方法的返回预设；gotAdmin 记录写方法收到的入参。
+	created  bool
+	gotAdmin []string
 }
 
 func (f *fakeExec) Instances(instances []InstanceConfig) ([]InstanceStatus, error) {
@@ -49,6 +53,38 @@ func (f *fakeExec) Query(instance InstanceConfig, sql string, limit int) (QueryR
 }
 
 func (f *fakeExec) Status(instance InstanceConfig) (StatusResult, error) { return f.status, f.err }
+
+// --- 写方法：记录入参，返回预设结果（call_test 里用于校验方法层防线）---
+
+func (f *fakeExec) CreateDatabase(instance InstanceConfig, name, owner string) (bool, error) {
+	f.gotAdmin = append(f.gotAdmin, "createDatabase:"+name+":"+owner)
+	return f.created, f.err
+}
+
+func (f *fakeExec) DropDatabase(instance InstanceConfig, name string) (bool, error) {
+	f.gotAdmin = append(f.gotAdmin, "dropDatabase:"+name)
+	return true, f.err
+}
+
+func (f *fakeExec) CreateRole(instance InstanceConfig, user, password string, canCreateDB, canCreateRole bool) (bool, error) {
+	f.gotAdmin = append(f.gotAdmin, "createUser:"+user+":"+password)
+	return f.created, f.err
+}
+
+func (f *fakeExec) DropRole(instance InstanceConfig, user string) (bool, error) {
+	f.gotAdmin = append(f.gotAdmin, "dropUser:"+user)
+	return true, f.err
+}
+
+func (f *fakeExec) Grant(instance InstanceConfig, user, database string, privileges []string, withGrantOption bool) error {
+	f.gotAdmin = append(f.gotAdmin, "grant:"+user+":"+database+":"+strings.Join(privileges, ","))
+	return f.err
+}
+
+func (f *fakeExec) ChangePassword(instance InstanceConfig, user, password string) error {
+	f.gotAdmin = append(f.gotAdmin, "changePassword:"+user+":"+password)
+	return f.err
+}
 
 // TestCallInstances 实例探测结果结构化：单实例失败不抹掉其它实例。
 func TestCallInstances(t *testing.T) {

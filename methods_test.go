@@ -276,3 +276,53 @@ func newTestStore(t *testing.T) *plugincfg.Store {
 	t.Helper()
 	return plugincfg.NewStore(t.TempDir())
 }
+
+// TestInfoMethodCapabilities info.json 的方法级能力必须与「只读 read / 管理 admin」一致。
+//
+// 尤其盯住 config.get / config.set：漏声明会让配置读取回退到插件级 system:admin，
+// 授权与写审计被放大（这是反复踩过的坑，所以用精确表驱动钉死）。
+func TestInfoMethodCapabilities(t *testing.T) {
+	raw, err := os.ReadFile("info.json")
+	if err != nil {
+		t.Fatalf("读取 info.json 失败: %v", err)
+	}
+	var manifest struct {
+		Version            string            `json:"version"`
+		Capabilities       []string          `json:"capabilities"`
+		MethodCapabilities map[string]string `json:"method_capabilities"`
+	}
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatalf("解析 info.json 失败: %v", err)
+	}
+	want := map[string]string{
+		"db-postgres.config.get": "system:read",
+		"db-postgres.instances":  "system:read",
+		"db-postgres.databases":  "system:read",
+		"db-postgres.query":      "system:read",
+		"db-postgres.status":     "system:read",
+
+		"db-postgres.config.set":     "system:admin",
+		"db-postgres.createDatabase": "system:admin",
+		"db-postgres.dropDatabase":   "system:admin",
+		"db-postgres.createUser":     "system:admin",
+		"db-postgres.dropUser":       "system:admin",
+		"db-postgres.grant":          "system:admin",
+		"db-postgres.changePassword": "system:admin",
+	}
+	if len(manifest.MethodCapabilities) != len(want) {
+		t.Fatalf("method_capabilities 条数=%d，期望 %d: %v", len(manifest.MethodCapabilities), len(want), manifest.MethodCapabilities)
+	}
+	for method, capability := range want {
+		if got := manifest.MethodCapabilities[method]; got != capability {
+			t.Fatalf("method_capabilities[%q]=%q，期望 %q", method, got, capability)
+		}
+	}
+	for method := range manifest.MethodCapabilities {
+		if _, ok := want[method]; !ok {
+			t.Fatalf("出现未登记的方法级能力: %s", method)
+		}
+	}
+	if len(manifest.Capabilities) == 0 || manifest.Capabilities[0] != "system:admin" {
+		t.Fatalf("插件级 capabilities 应保留 system:admin（写方法门控依赖它）: %v", manifest.Capabilities)
+	}
+}

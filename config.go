@@ -120,6 +120,7 @@ func loadConfig() (config, error) {
 	includeDefault := store.Exists() || primaryEnvSet()
 	pgCfg := pgop.Config{
 		Instances:       buildInstances(values, includeDefault, envInstances),
+		Admin:           hasAdminCapability(m.Capabilities),
 		PsqlBin:         settings.PsqlBin,
 		DockerBin:       settings.DockerBin,
 		DockerContainer: settings.DockerContainer,
@@ -155,6 +156,17 @@ func loadConfig() (config, error) {
 		return config{}, fmt.Errorf("缺少环境变量 KORE_PLUGIN_SOCK")
 	}
 	return cfg, nil
+}
+
+// hasAdminCapability 判断 manifest 是否声明了 system:admin。
+// 写方法的插件侧门控用它：内核授权之外再自检一次，避免清单被改小后仍能写库。
+func hasAdminCapability(capabilities []string) bool {
+	for _, capability := range capabilities {
+		if capability == "system:admin" {
+			return true
+		}
+	}
+	return false
 }
 
 // defaultValues 是代码默认值：本机 5432、postgres、密码取 KORE_PG_PASSWORD。

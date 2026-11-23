@@ -32,6 +32,7 @@ func testConfig(t *testing.T) *config {
 		source:       plugincfg.SourceDefault,
 		pg: pgop.Config{
 			Instances: buildInstances(values, true, nil),
+			Admin:     true,
 		},
 	}
 }

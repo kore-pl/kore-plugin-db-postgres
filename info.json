@@ -1,17 +1,31 @@
 {
   "id": "db-postgres",
   "name": "PostgreSQL 管理插件",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "protocol": "kore.plugin.v1",
   "lifecycle": "lazy",
   "depth_level": "basic",
   "entry": "bin/db-postgres",
   "capabilities": ["system:admin"],
+  "method_capabilities": {
+    "db-postgres.config.get": "system:read",
+    "db-postgres.instances": "system:read",
+    "db-postgres.databases": "system:read",
+    "db-postgres.query": "system:read",
+    "db-postgres.status": "system:read",
+    "db-postgres.config.set": "system:admin",
+    "db-postgres.createDatabase": "system:admin",
+    "db-postgres.dropDatabase": "system:admin",
+    "db-postgres.createUser": "system:admin",
+    "db-postgres.dropUser": "system:admin",
+    "db-postgres.grant": "system:admin",
+    "db-postgres.changePassword": "system:admin"
+  },
   "triggers": [],
   "requires_kore": ">=0.1.0 <0.2.0",
   "resources": {"memory_mb": 8, "cpu_quota": "20%", "pids_max": 32},
   "depends_on": [],
   "conflicts": ["db-mysql"],
   "scenario_tags": ["data"],
-  "size_bytes": 1523427
+  "size_bytes": 1539470
 }

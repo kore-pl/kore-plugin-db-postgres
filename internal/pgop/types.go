@@ -71,6 +71,10 @@ func NewFaultError(kind FaultKind, message string) *FaultError {
 // Config 是插件运行期 PostgreSQL 配置。
 type Config struct {
 	Instances []InstanceConfig
+	// Admin 表示插件自身声明了 system:admin（info.json.capabilities）。
+	// 内核在 invoke 前已按 method_capabilities 授权；这里是插件侧的纵深防御：
+	// 未声明 system:admin 时写方法一律 E_UNAUTHORIZED，不依赖内核配置正确。
+	Admin bool
 	// PsqlBin / DockerBin 是 psql 与 docker 可执行文件（缺省走 PATH）。
 	PsqlBin         string
 	DockerBin       string
@@ -86,11 +90,22 @@ type Config struct {
 }
 
 // Executor 是数据库操作执行面：真实实现是 psql / docker exec，测试可注入故障。
+//
+// 只读四方法与写六方法在同一个接口里：插件只有一种执行面（psql 子进程），
+// 分开成两个接口只会让调用方多一次类型断言，换不来安全边界——安全边界在
+// admin.go 的能力门控与标识符白名单上。
 type Executor interface {
 	Instances(instances []InstanceConfig) ([]InstanceStatus, error)
 	Databases(instance InstanceConfig, includeSystem bool) ([]Database, error)
 	Query(instance InstanceConfig, sql string, limit int) (QueryResult, error)
 	Status(instance InstanceConfig) (StatusResult, error)
+
+	CreateDatabase(instance InstanceConfig, name, owner string) (bool, error)
+	DropDatabase(instance InstanceConfig, name string) (bool, error)
+	CreateRole(instance InstanceConfig, user, password string, canCreateDB, canCreateRole bool) (bool, error)
+	DropRole(instance InstanceConfig, user string) (bool, error)
+	Grant(instance InstanceConfig, user, database string, privileges []string, withGrantOption bool) error
+	ChangePassword(instance InstanceConfig, user, password string) error
 }
 
 // InstancesResult 是 db-postgres.instances 的结构化结果。
@@ -156,4 +171,94 @@ type queryParams struct {
 // statusParams 是 db-postgres.status 的显式入参形状。
 type statusParams struct {
 	Instance string `json:"instance"`
+}
+
+// createDatabaseParams 是 db-postgres.createDatabase 的入参形状。
+// Owner 可选（缺省由执行者决定），必须已存在。
+type createDatabaseParams struct {
+	Instance string `json:"instance"`
+	Name     string `json:"name"`
+	Owner    string `json:"owner"`
+}
+
+// dropDatabaseParams 是 db-postgres.dropDatabase 的入参形状；Confirm 必须为 true。
+type dropDatabaseParams struct {
+	Instance string `json:"instance"`
+	Name     string `json:"name"`
+	Confirm  bool   `json:"confirm"`
+}
+
+// createUserParams 是 db-postgres.createUser 的入参形状。
+// Password 为空表示建一个无口令账号（peer/trust/证书认证等场景合法）。
+// CanCreateDb / CanCreateRole 是显式的 CREATEDB / CREATEROLE 选项，不接受超级用户。
+type createUserParams struct {
+	Instance      string `json:"instance"`
+	User          string `json:"user"`
+	Password      string `json:"password"`
+	CanCreateDb   bool   `json:"can_create_db"`
+	CanCreateRole bool   `json:"can_create_role"`
+}
+
+// dropUserParams 是 db-postgres.dropUser 的入参形状；Confirm 必须为 true。
+type dropUserParams struct {
+	Instance string `json:"instance"`
+	User     string `json:"user"`
+	Confirm  bool   `json:"confirm"`
+}
+
+// grantParams 是 db-postgres.grant 的入参形状：库级权限，权限名过白名单。
+type grantParams struct {
+	Instance        string   `json:"instance"`
+	User            string   `json:"user"`
+	Database        string   `json:"database"`
+	Privileges      []string `json:"privileges"`
+	WithGrantOption bool     `json:"with_grant_option"`
+}
+
+// changePasswordParams 是 db-postgres.changePassword 的入参形状：
+// 口令只走 stdin，不进 argv / 日志 / 响应。
+type changePasswordParams struct {
+	Instance string `json:"instance"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+}
+
+// CreateDatabaseResult 是 db-postgres.createDatabase 的结果；Created=false 表示库已存在。
+type CreateDatabaseResult struct {
+	Created bool   `json:"created"`
+	Name    string `json:"name"`
+	Owner   string `json:"owner,omitempty"`
+}
+
+// DropDatabaseResult 是 db-postgres.dropDatabase 的结果。
+type DropDatabaseResult struct {
+	Dropped bool   `json:"dropped"`
+	Name    string `json:"name"`
+}
+
+// CreateUserResult 是 db-postgres.createUser 的结果；Created=false 表示账号已存在（未改密）。
+type CreateUserResult struct {
+	Created bool   `json:"created"`
+	User    string `json:"user"`
+}
+
+// DropUserResult 是 db-postgres.dropUser 的结果。
+type DropUserResult struct {
+	Dropped bool   `json:"dropped"`
+	User    string `json:"user"`
+}
+
+// GrantResult 是 db-postgres.grant 的结果；Privileges 是归一化后实际授予的权限。
+type GrantResult struct {
+	Granted         bool     `json:"granted"`
+	User            string   `json:"user"`
+	Database        string   `json:"database"`
+	Privileges      []string `json:"privileges"`
+	WithGrantOption bool     `json:"with_grant_option"`
+}
+
+// ChangePasswordResult 是 db-postgres.changePassword 的结果；绝不回显口令。
+type ChangePasswordResult struct {
+	Changed bool   `json:"changed"`
+	User    string `json:"user"`
 }

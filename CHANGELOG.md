@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 (2026-11-23)
+
+- feat: 补齐「能干活」的六个管理方法——`db-postgres.createDatabase` / `dropDatabase` / `createUser` / `dropUser` / `grant` / `changePassword`；建库与建用户已存在时回 `created=false`（不报错、不改口令），删库与删用户不存在回 `E_NOTFOUND`
+- feat: `grant` 只做库级权限白名单（`CONNECT` / `CREATE` / `TEMP`(`TEMPORARY`) / `ALL`，可选 `with_grant_option`）；表级/schema 级授权与 `REVOKE` 不在 v1 面
+- feat: `changePassword` 用 `ALTER ROLE ... WITH PASSWORD`，回包只有 `{changed,user}`；`createUser` 可选 `can_create_db` / `can_create_role`，不提供超级用户创建
+- security: 写方法要求 `system:admin`（插件侧 `requireAdmin` 纵深防御 + 内核 `method_capabilities` 授权）；`dropDatabase` / `dropUser` 必须 `confirm=true`
+- security: 系统库 `postgres` / `template0` / `template1` 与保留账号（`pg_` 前缀、`postgres`）在任何参数下都拒绝；删用户时执行面再查 `pg_roles.rolsuper`，超级用户与当前连接账号一律拒绝
+- security: 库名/用户名走白名单 `^[a-zA-Z0-9_]{1,63}$` + PostgreSQL `"..."` 标识符包裹（内部 `"` 双写），绝不字符串拼接；口令走 `'...'` 字面量（只双写单引号，不动反斜杠）
+- security: 含口令的 DDL 改走 stdin 通道（psql 无 `-c` 时读 stdin；docker 回退先 `read` 走口令行），口令不进 argv / ps / docker 命令行 / 日志；错误文本继续按口令脱敏
+- feat: `info.json` 声明 `method_capabilities` 12 条（5 个只读 + 7 个管理，含 `config.get`=read / `config.set`=admin），只读方法不再按 admin 授权与写审计
+- test: 方法层防线（能力门控 / confirm / 系统库 / 保留账号 / 注入拒绝 / 权限白名单 / 口令不回显）+ 标识符与 SQL 构造 + 写方法故障注入（4 类 × 10 方法）+ `info.json` capability 一致性表驱动
+
 ## 0.2.1 (2026-11-23)
 
 - fix: `db-postgres.instances` 空态引导——`count=0` 时返回 `hint`「尚未配置 PostgreSQL 连接。请在插件设置里填写 host/port/user/password，或用 KORE_PG_HOST 等环境变量」；有配置但全部不可达时返回「配置了 N 个实例但均不可达，请检查 host/port 与网络」；只要有可达实例则不带 `hint`（调用始终 200，空列表不是错误）

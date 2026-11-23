@@ -261,15 +261,69 @@ func (c *Client) run(instance InstanceConfig, sql string, timeout time.Duration)
 	}
 }
 
+// runStdin 用 stdin 执行一条 SQL（无 -c）：写操作（尤其带口令的 DDL）只能走这条通道，
+// 因为 argv 会出现在本机 ps / docker 命令行里，口令一旦进 argv 就等于公开。
+//
+// psql 在既没有 -c 也没有 -f 时从 stdin 读命令；docker 模式下包装脚本先读走第一行
+// （口令）再 exec psql，剩余 stdin 就是 SQL——两条通道都不把口令放进 argv。
+func (c *Client) runStdin(instance InstanceConfig, sql string, timeout time.Duration) ([]byte, *OpError) {
+	password := instancePassword(instance)
+	backend, perr := c.resolved()
+	if perr != nil {
+		return nil, perr
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	stdout, stderr, err := c.execStdin(ctx, backend, instance, password, sql, timeout)
+	ctxErr := ctx.Err()
+	cancel()
+	if err == nil {
+		return stdout, nil
+	}
+	if errors.Is(ctxErr, context.DeadlineExceeded) {
+		return nil, timeoutError(timeout)
+	}
+	return nil, c.execError(backend, err, stderr, password, timeout)
+}
+
+// execStdin 构造并执行「SQL 从 stdin 读」的子进程。
+func (c *Client) execStdin(ctx context.Context, backend *backend, instance InstanceConfig, password, sql string, timeout time.Duration) ([]byte, string, error) {
+	target, perr := c.targetFor(instance, backend)
+	if perr != nil {
+		return nil, "", perr
+	}
+	args := psqlStdinArgs(target, instance.User)
+	var cmd *exec.Cmd
+	if backend.kind == kindPsql {
+		cmd = exec.CommandContext(ctx, backend.bin, args...)
+		cmd.Env = psqlEnv(password, timeout)
+		cmd.Stdin = strings.NewReader(sql)
+	} else {
+		// 第一行是口令（脚本 read 走），其后的内容是 SQL（psql 从剩余 stdin 读）。
+		cmd = exec.CommandContext(ctx, backend.bin, dockerExecArgs(backend.container, args)...)
+		cmd.Env = minimalEnv()
+		cmd.Stdin = strings.NewReader(password + "\n" + sql)
+	}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return stdout.Bytes(), stderr.String(), err
+}
+
+// targetFor 计算本次调用的 psql 目标地址（docker 模式按容器内地址映射）。
+func (c *Client) targetFor(instance InstanceConfig, backend *backend) (psqlTarget, *OpError) {
+	if backend.kind != kindDocker {
+		return psqlTarget{host: instance.Host, port: instance.Port, database: defaultDatabase}, nil
+	}
+	return backend.dockerTarget(instance)
+}
+
 // exec 构造并执行子进程，返回 stdout 与 stderr 文本。
 func (c *Client) exec(ctx context.Context, backend *backend, instance InstanceConfig, password, sql string, timeout time.Duration) ([]byte, string, error) {
-	target := psqlTarget{host: instance.Host, port: instance.Port, database: defaultDatabase}
-	if backend.kind == kindDocker {
-		resolved, perr := backend.dockerTarget(instance)
-		if perr != nil {
-			return nil, "", perr
-		}
-		target = resolved
+	target, perr := c.targetFor(instance, backend)
+	if perr != nil {
+		return nil, "", perr
 	}
 	args := psqlArgs(target, instance.User, sql)
 	var cmd *exec.Cmd
@@ -303,7 +357,20 @@ func dockerExecArgs(container string, psqlArgs []string) []string {
 }
 
 // psqlArgs 构造 psql 参数。密码绝不进 argv：只通过 PGPASSWORD 环境变量（或容器内 stdin）传递。
+//
+// SQL 放进 argv 的 -c 是安全的（只读白名单已保证不含口令）；含口令的写语句走
+// psqlStdinArgs + stdin，见 runStdin。
 func psqlArgs(target psqlTarget, user, sql string) []string {
+	return append(psqlBaseArgs(target, user), "-c", sql)
+}
+
+// psqlStdinArgs 构造「SQL 从 stdin 读」的参数：没有 -c，psql 会自动读 stdin。
+func psqlStdinArgs(target psqlTarget, user string) []string {
+	return psqlBaseArgs(target, user)
+}
+
+// psqlBaseArgs 是两种通道共用的连接参数（目标地址 + CSV 输出 + 遇错即停）。
+func psqlBaseArgs(target psqlTarget, user string) []string {
 	return []string{
 		"--no-psqlrc",
 		"--csv",
@@ -314,7 +381,6 @@ func psqlArgs(target psqlTarget, user, sql string) []string {
 		"-p", strconv.Itoa(target.port),
 		"-U", user,
 		"-d", target.database,
-		"-c", sql,
 	}
 }
 
