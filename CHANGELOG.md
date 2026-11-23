@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 (2026-11-23)
+
+### Changed
+
+- 提升为 `production` 深度等级（故障注入测试已覆盖）
+
 ## 0.3.0 (2026-11-23)
 
 - feat: 补齐「能干活」的六个管理方法——`db-postgres.createDatabase` / `dropDatabase` / `createUser` / `dropUser` / `grant` / `changePassword`；建库与建用户已存在时回 `created=false`（不报错、不改口令），删库与删用户不存在回 `E_NOTFOUND`
