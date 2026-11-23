@@ -2,7 +2,7 @@
 
 PostgreSQL 管理插件：**真实连接**实例、列库（含大小）、执行只读 SQL、读状态指标，并提供「界面可配、保存即生效」的连接配置契约。
 
-- 深度等级 `basic`：核心路径（配置 / 探测 / 库列表 / 只读查询 / 状态）可用，写操作与备份恢复延后版本，**不得标"生产级 / 开箱可用"**。
+- 深度等级 `production`（0.3.1 起，故障注入已覆盖）：只读路径（配置 / 探测 / 库列表 / 只读查询 / 状态 / 慢查询）+ 日常写操作（建删库、建删用户、授权、改密）均已实现；备份恢复仍不在本版范围。
 - 不引入任何 PostgreSQL driver、不内置客户端二进制：执行面是宿主机 `psql` 子进程；本机没有 `psql` 时自动回退到 `docker exec <postgres 容器> psql`。
 
 ## 方法
@@ -18,6 +18,14 @@ PostgreSQL 管理插件：**真实连接**实例、列库（含大小）、执�
 | `db-postgres.query` | `{instance, sql, limit?}` | `{columns, rows, row_count, truncated}` |
 | `db-postgres.status` | `{instance}` | `{instance, version, connections, databases, uptime_s, cache_hit_ratio, blocks_hit, blocks_read}` |
 | `db-postgres.slowlog` | `{instance, schema?, min_ms?, limit?}` | `{instance, source, schema?, min_ms, limit, available, count, queries:[{schema,digest,query,executions,total_time,mean,max,rows}], warnings?, hint}` |
+| `db-postgres.createDatabase` | `{instance, name, owner?}` | `{created, name, owner?}`；库已存在时 `created=false` |
+| `db-postgres.dropDatabase` | `{instance, name, confirm:true}` | `{dropped, name}`；系统库先行拒绝 |
+| `db-postgres.createUser` | `{instance, user, password?, can_create_db?, can_create_role?}` | `{created, user}`；账号已存在时 `created=false`（不改密） |
+| `db-postgres.dropUser` | `{instance, user, confirm:true}` | `{dropped, user}`；超级用户 / 保留账号先行拒绝 |
+| `db-postgres.grant` | `{instance, user, database, privileges[], with_grant_option?}` | `{granted, user, database, privileges, with_grant_option}`；权限只放行 `CONNECT` / `CREATE` / `TEMP`（`TEMPORARY`）/ `ALL` |
+| `db-postgres.changePassword` | `{instance, user, password}` | `{changed, user}`；口令只经 psql stdin，不进 argv / 日志 / 响应 |
+
+写方法（`createDatabase` / `dropDatabase` / `createUser` / `dropUser` / `grant` / `changePassword` + `config.set`）要求插件自身声明 `system:admin`，内核按 `method_capabilities` 先授权；删除类方法必须显式 `confirm=true`。
 
 要点：
 
@@ -75,7 +83,7 @@ PostgreSQL 管理插件：**真实连接**实例、列库（含大小）、执�
   - `WITH` 子句里扫描数据修改关键字（`WITH x AS (DELETE … RETURNING *)` 是真实写路径）。
   - 拒绝 `SELECT … INTO`（建表）、`FOR UPDATE/SHARE`（加锁读）、`pg_sleep`/`pg_read_file`/`pg_ls_dir`/`lo_import`/`lo_export`/`dblink`/`set_config`/`nextval`/`pg_terminate_backend` 等副作用函数、psql 反斜杠元命令、可执行注释。
 - **标识符白名单**：库名 `^[a-zA-Z0-9_]{1,63}$`；实例名 `^[a-z0-9][a-z0-9.-]{0,63}$`；主机/用户名各自正则且拒绝 `-` 开头（防被当成 psql 选项）。
-- 写操作、连接配置之外的任何状态变更都不在 v0.2 范围。
+- 写方法只做上面列出的六件事（建删库 / 建删用户 / 授权 / 改密），不提供任意 SQL 执行；`query` 仍是只读白名单。
 
 ### 已知边界（v1.1 处理）
 
@@ -91,10 +99,10 @@ PostgreSQL 管理插件：**真实连接**实例、列库（含大小）、执�
 | --- | --- | --- |
 | kill -9 | `TestKill9` | 进程被信号终止，UDS 连接随后不可读 |
 | 握手超时 | `TestTimeout` | 2s 内超时，以退出码 1 退出，不永久挂起 |
-| 客户端被杀 | `TestKillFault` | 四个方法均 `E_UPSTREAM`（"信号 9"） |
-| 调用超时 | `TestTimeoutFault` | 四个方法均 `E_UPSTREAM`（"超时"） |
-| 磁盘满 | `TestDiskFullFault` | 四个方法均 `E_INTERNAL`（"磁盘满"） |
-| cgroup 超限 | `TestCgroupLimitFault` | 四个方法均 `E_UNSUPPORTED`（"cgroup"） |
+| 客户端被杀 | `TestKillFault` | 全部 11 个业务方法均 `E_UPSTREAM`（"信号 9"） |
+| 调用超时 | `TestTimeoutFault` | 全部 11 个业务方法均 `E_UPSTREAM`（"超时"） |
+| 磁盘满 | `TestDiskFullFault` | 全部 11 个业务方法均 `E_INTERNAL`（"磁盘满"） |
+| cgroup 超限 | `TestCgroupLimitFault` | 全部 11 个业务方法均 `E_UNSUPPORTED`（"cgroup"） |
 
 kill / 握手超时是**黑盒**用例（直接拉起真实 `bin/db-postgres`）；disk / cgroup 是**注入级**用例（执行面注入故障，验证错误映射链路），因为插件没有开关去真的写满磁盘或压爆 cgroup。
 
@@ -109,7 +117,7 @@ KORE_PG_E2E=1 KORE_PG_DOCKER_CONTAINER=kore-pg-test \
 docker rm -f kore-pg-test
 ```
 
-用例走完整链路并断言：默认配置 → `config.set` 指向 15432（`restart_required=false`）→ 配置文件 0600 → `config.get` 密码 `***` → `instances` 可达且版本 `PostgreSQL 16.x` → `databases` 含 `postgres` 且大小 >0、默认不含模板库 → `query "SELECT 1 AS n"` → 容器外造表后用 `query` 读到 → NULL 与空串可区分 → 写操作/多语句/`EXPLAIN ANALYZE DELETE` 被 `E_INVALID` 拒绝且表数据未变 → 1000 行与 8 KiB 上限 → `status` 真实连接数/库数/运行时长/命中率 → 响应中无机密。
+用例走完整链路并断言：默认配置 → `config.set` 指向 15432（`restart_required=false`）→ 配置文件 0600 → `config.get` 密码 `***` → `instances` 可达且版本 `PostgreSQL 16.x` → `databases` 含 `postgres` 且大小 >0、默认不含模板库 → `query "SELECT 1 AS n"` → 容器外造表后用 `query` 读到 → NULL 与空串可区分 → `query` 里的写 SQL / 多语句 / `EXPLAIN ANALYZE DELETE` 被 `E_INVALID` 拒绝且表数据未变 → 1000 行与 8 KiB 上限 → `status` 真实连接数/库数/运行时长/命中率 → 响应中无机密。
 
 ## 构建与验收
 
