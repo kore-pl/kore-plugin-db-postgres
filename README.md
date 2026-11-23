@@ -13,7 +13,7 @@ PostgreSQL 管理插件：**真实连接**实例、列库（含大小）、执�
 | --- | --- | --- |
 | `db-postgres.config.get` | `{}` | `{schema, values, source}`；`password` 只回 `***` |
 | `db-postgres.config.set` | `{values:{...}}` | `{saved, applied, restart_required, warnings}` |
-| `db-postgres.instances` | `{instance?}` | `{instances:[{name,host,port,reachable,version,error}], count}` |
+| `db-postgres.instances` | `{instance?}` | `{instances:[{name,host,port,reachable,version,error}], count, hint?}` |
 | `db-postgres.databases` | `{instance, include_system?}` | `{instance, databases:[{name,size_bytes}], count}` |
 | `db-postgres.query` | `{instance, sql, limit?}` | `{columns, rows, row_count, truncated}` |
 | `db-postgres.status` | `{instance}` | `{instance, version, connections, databases, uptime_s, cache_hit_ratio, blocks_hit, blocks_read}` |
@@ -21,6 +21,7 @@ PostgreSQL 管理插件：**真实连接**实例、列库（含大小）、执�
 要点：
 
 - `instances` 对每个实例执行 `SELECT version()`；单实例失败只写该实例的 `error`，不影响其它实例。
+- `instances` 的 `hint` 只在空态出现：`count=0` → 「尚未配置 PostgreSQL 连接…」；有实例但**全部不可达** → 「配置了 N 个实例但均不可达…」；只要有一个可达就不带 `hint`。调用本身始终是 200，空列表不是错误。
 - `databases` 的 `size_bytes` 来自 `pg_database_size(datname)`；取不到时为 `-1`（不是 0）。
 - `query` 默认返回 100 行、上限 1000 行；单格超 8 KiB 截断，行数据总量超 8 MiB 截断，都落 `truncated: true`。
 - `status` 的 `cache_hit_ratio = blocks_hit / (blocks_hit + blocks_read)`，取自 `pg_stat_database`；`connections` 取自 `pg_stat_activity`。

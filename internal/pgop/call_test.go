@@ -89,6 +89,45 @@ func TestCallInstancesFilter(t *testing.T) {
 	}
 }
 
+// TestCallInstancesHint 空态引导：无实例与「全部不可达」给不同 hint，有可达实例时不给。
+func TestCallInstancesHint(t *testing.T) {
+	empty := testConfig()
+	empty.Instances = nil
+	result, perr := Call("db-postgres.instances", json.RawMessage(`{}`), empty, &fakeExec{})
+	if perr != nil {
+		t.Fatalf("意外错误: %v", perr)
+	}
+	var parsed InstancesResult
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		t.Fatalf("解析结果失败: %v", err)
+	}
+	if parsed.Count != 0 || !strings.Contains(parsed.Hint, "尚未配置 PostgreSQL 连接") {
+		t.Fatalf("空实例 hint 异常: %s", result)
+	}
+
+	unreachable := testConfig()
+	unreachable.Instances = []InstanceConfig{{Name: DefaultInstanceName, Host: "127.0.0.1", Port: 5432, User: "postgres"}}
+	result, perr = Call("db-postgres.instances", json.RawMessage(`{}`), unreachable, &fakeExec{statuses: []InstanceStatus{
+		{Name: DefaultInstanceName, Host: "127.0.0.1", Port: 5432, Reachable: false, Error: "connection refused"},
+	}})
+	if perr != nil {
+		t.Fatalf("意外错误: %v", perr)
+	}
+	if !strings.Contains(string(result), "配置了 1 个实例但均不可达") {
+		t.Fatalf("不可达 hint 异常: %s", result)
+	}
+
+	result, perr = Call("db-postgres.instances", json.RawMessage(`{}`), testConfig(), &fakeExec{statuses: []InstanceStatus{
+		{Name: DefaultInstanceName, Host: "127.0.0.1", Port: 5432, Reachable: true, Version: "PostgreSQL 16.16"},
+	}})
+	if perr != nil {
+		t.Fatalf("意外错误: %v", perr)
+	}
+	if strings.Contains(string(result), `"hint"`) {
+		t.Fatalf("可达实例不应带 hint: %s", result)
+	}
+}
+
 // TestCallDatabases 库列表：include_system 默认取配置，显式入参覆盖配置。
 func TestCallDatabases(t *testing.T) {
 	exec := &fakeExec{databases: []Database{{Name: "postgres", SizeBytes: 8234567}, {Name: "kore_e2e", SizeBytes: 7654321}}}

@@ -94,9 +94,13 @@ type Executor interface {
 }
 
 // InstancesResult 是 db-postgres.instances 的结构化结果。
+//
+// Hint 只在空态（count=0）或全部不可达时出现，是给前端的「下一步做什么」，
+// 不是错误：调用本身仍然成功，实例列表照常为空。
 type InstancesResult struct {
 	Instances []InstanceStatus `json:"instances"`
 	Count     int              `json:"count"`
+	Hint      string           `json:"hint,omitempty"`
 }
 
 // DatabasesResult 是 db-postgres.databases 的结构化结果。

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 (2026-11-23)
+
+- fix: `db-postgres.instances` 空态引导——`count=0` 时返回 `hint`「尚未配置 PostgreSQL 连接。请在插件设置里填写 host/port/user/password，或用 KORE_PG_HOST 等环境变量」；有配置但全部不可达时返回「配置了 N 个实例但均不可达，请检查 host/port 与网络」；只要有可达实例则不带 `hint`（调用始终 200，空列表不是错误）
+- test: 三种空态/可达场景的单测覆盖（空实例 / 全部不可达 / 至少一个可达不带 hint）
+- docs: README 方法表补 `hint` 字段与语义
+
 ## 0.2.0 (2026-11-23)
 
 - feat: 去掉骨架占位（`noopExecutor`）——`db-postgres.instances/databases/query/status` 四个方法真实连接 PostgreSQL：`instances` 逐实例 `SELECT version()` 返回 `{name,host,port,reachable,version,error}`；`databases` 用 `pg_database_size` 返回库名 + 真实字节数；`query` 执行只读 SQL（默认 100 行 / 上限 1000 行、单格 8 KiB、总行数据 8 MiB）；`status` 从 `pg_stat_database` / `pg_stat_activity` 取版本、连接数、库数、运行时长、缓存命中率
