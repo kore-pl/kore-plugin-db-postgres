@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.4 (2026-11-24)
+
+- chore(depth_level): `production` → `basic`，依据 `PLUGIN-CATALOG.md` §6.1 升级判据——升 `production` 要求
+  ①边界用例覆盖（异常输入 / 并发 / 权限不足 / 资源耗尽各 ≥1 例并进 CI）与 ②故障注入通过**两条都满足**；
+  本仓 `tests/fault/` 五类故障注入真实 PASS（②达成），但 `tests/boundary/` 不存在、并发用例
+  （`t.Parallel`）0 命中、权限不足边界用例 0 命中（现有 2 处 `permission` 断言是 e2e 对配置文件
+  0600 权限位的校验，不是权限不足用例）→ 0.3.1 的 `production` 属单维度达标的**过度声明**，
+  索引的 `basic` 才是正确值
+- chore: **不是降级缺陷**——零代码变更，方法 / 能力 / 故障矩阵均未改；边界用例与高级配置延到 v1.1
+- chore(release): 版本 bump 0.3.3 → 0.3.4（`info.json` 在 dist 包体内，改元数据必须 bump，RELEASE §1）
+
 ## 0.3.3 (2026-11-23)
 
 - feat: 优先采用内核注入凭据（ADR-0026 / §3.5 #8）——默认实例若存在 `PGPASSWORD` 环境变量（内核按凭据授权注入），
