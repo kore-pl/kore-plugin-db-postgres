@@ -2,7 +2,7 @@
 
 PostgreSQL 管理插件：**真实连接**实例、列库（含大小）、执行只读 SQL、读状态指标，并提供「界面可配、保存即生效」的连接配置契约。
 
-- 深度等级 `production`（0.3.1 起，故障注入已覆盖）：只读路径（配置 / 探测 / 库列表 / 只读查询 / 状态 / 慢查询）+ 日常写操作（建删库、建删用户、授权、改密）均已实现；备份恢复仍不在本版范围。
+- 深度等级 `basic`（核心路径可用；边界用例与 G-20 要求的四类故障注入尚未全量覆盖，按升级判据计 basic 并延 v1.1——不是功能降级）：只读路径（配置 / 探测 / 库列表 / 只读查询 / 状态 / 慢查询）+ 日常写操作（建删库、建删用户、授权、改密）均已实现；备份恢复仍不在本版范围。
 - 不引入任何 PostgreSQL driver、不内置客户端二进制：执行面是宿主机 `psql` 子进程；本机没有 `psql` 时自动回退到 `docker exec <postgres 容器> psql`。
 
 ## 方法
@@ -141,7 +141,7 @@ make build && make dist
 - **贡献**：[CONTRIBUTING.md](CONTRIBUTING.md)（构建、门禁、发版、边界）。
 - **安全**：[SECURITY.md](SECURITY.md)——漏洞不要开公开 issue。
 - **行为准则**：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
-- **兼容性**：`protocol: kore.plugin.v1` · `requires_kore: >=0.1.0 <0.2.0` · `lifecycle: lazy` · 深度等级 `production`。
+- **兼容性**：`protocol: kore.plugin.v1` · `requires_kore: >=0.1.0 <0.2.0` · `lifecycle: lazy` · 深度等级 `basic`。
 - **验证方式**：本地 `make check` 优先（CI 只在 push main / tag / PR / 手动跑；发布前 `make dist` 连跑两次核对 sha 一致）。
 - **发布产物**：`make dist` → `dist/db-postgres-0.3.1.tar.gz` + `.sha256`（位级可复现，连跑两次 sha 相同）。
 - **相关仓库**：[索引 kore-plugins](https://github.com/kore-pl/kore-plugins) · [协议文档](https://github.com/kore-pl/kore/blob/main/docs/PLUGIN-PROTOCOL.md) · [SDK 指南](https://github.com/kore-pl/kore/blob/main/docs/PLUGIN-SDK.md)
