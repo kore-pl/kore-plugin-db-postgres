@@ -58,7 +58,7 @@ func callCreateDatabase(raw json.RawMessage, cfg Config, exec Executor) (json.Ra
 		return nil, perr
 	}
 	created, err := exec.CreateDatabase(instance, p.Name, owner)
-	if err != nil {
+	if !isNilError(err) {
 		return nil, classify(err)
 	}
 	return encode(CreateDatabaseResult{Created: created, Name: p.Name, Owner: owner})
@@ -91,7 +91,7 @@ func callDropDatabase(raw json.RawMessage, cfg Config, exec Executor) (json.RawM
 		return nil, perr
 	}
 	dropped, err := exec.DropDatabase(instance, p.Name)
-	if err != nil {
+	if !isNilError(err) {
 		return nil, classify(err)
 	}
 	return encode(DropDatabaseResult{Dropped: dropped, Name: p.Name})
@@ -123,7 +123,7 @@ func callCreateUser(raw json.RawMessage, cfg Config, exec Executor) (json.RawMes
 		return nil, perr
 	}
 	created, err := exec.CreateRole(instance, p.User, p.Password, p.CanCreateDb, p.CanCreateRole)
-	if err != nil {
+	if !isNilError(err) {
 		return nil, classify(err)
 	}
 	return encode(CreateUserResult{Created: created, User: p.User})
@@ -155,7 +155,7 @@ func callDropUser(raw json.RawMessage, cfg Config, exec Executor) (json.RawMessa
 		return nil, perr
 	}
 	dropped, err := exec.DropRole(instance, p.User)
-	if err != nil {
+	if !isNilError(err) {
 		return nil, classify(err)
 	}
 	return encode(DropUserResult{Dropped: dropped, User: p.User})
@@ -190,7 +190,9 @@ func callGrant(raw json.RawMessage, cfg Config, exec Executor) (json.RawMessage,
 	if perr != nil {
 		return nil, perr
 	}
-	if err := exec.Grant(instance, p.User, p.Database, privileges, p.WithGrantOption); err != nil {
+	// isNilError 而非 err != nil：类型化 nil（(*OpError)(nil) 装进 error 接口）必须
+	// 判为成功，否则会走进 classify 并丢掉成功结果（r21 P0 回归）。
+	if err := exec.Grant(instance, p.User, p.Database, privileges, p.WithGrantOption); !isNilError(err) {
 		return nil, classify(err)
 	}
 	return encode(GrantResult{
@@ -227,7 +229,7 @@ func callChangePassword(raw json.RawMessage, cfg Config, exec Executor) (json.Ra
 	if perr != nil {
 		return nil, perr
 	}
-	if err := exec.ChangePassword(instance, p.User, p.Password); err != nil {
+	if err := exec.ChangePassword(instance, p.User, p.Password); !isNilError(err) {
 		return nil, classify(err)
 	}
 	return encode(ChangePasswordResult{Changed: true, User: p.User})

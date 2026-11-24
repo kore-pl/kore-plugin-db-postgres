@@ -103,13 +103,21 @@ func configuredNames(cfg Config) string {
 }
 
 // classify 把执行面错误映射为协议错误码：四类故障各有对应，其余走 OpError / E_INTERNAL。
+//
+// 类型化 nil 防线：Go 的 error 接口若装了 (*OpError)(nil)，err != nil 为真但底层
+// 指针为 nil；调用 err.Error() 或解引用 errors.As 的结果都会 SIGSEGV（r20-e2e 真机抓到）。
+// 入口用 reflect 挡掉所有「指针型类型化 nil」——不针对单一错误类型打补丁；
+// 每个 errors.As 命中后再确认目标指针非 nil。
 func classify(err error) *pluginapi.Error {
+	if err == nil || isNilError(err) {
+		return nil
+	}
 	var opErr *OpError
-	if errors.As(err, &opErr) {
+	if errors.As(err, &opErr) && opErr != nil {
 		return &pluginapi.Error{Code: opErr.Code, Message: opErr.Message}
 	}
 	var faultErr *FaultError
-	if errors.As(err, &faultErr) {
+	if errors.As(err, &faultErr) && faultErr != nil {
 		switch faultErr.Kind {
 		case FaultKill:
 			return upstream("进程被信号 9 终止: " + faultErr.Message)

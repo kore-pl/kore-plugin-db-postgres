@@ -614,12 +614,12 @@ func (c *Client) execError(backend *backend, err error, stderr, password string,
 		return timeoutError(timeout)
 	}
 	var execErr *exec.Error
-	if errors.As(err, &execErr) {
+	if errors.As(err, &execErr) && execErr != nil {
 		return opErrorf(pluginapi.E_UNSUPPORTED,
 			"无法执行 %s：%v；请安装 postgresql-client 或修正 KORE_PG_BIN", backend.describe(), execErr)
 	}
 	var opErr *OpError
-	if errors.As(err, &opErr) {
+	if errors.As(err, &opErr) && opErr != nil {
 		return opErr
 	}
 	return opErrorf(pluginapi.E_UPSTREAM, "%s 失败: %s", backend.describe(), sanitizeStderr(stderr, password))

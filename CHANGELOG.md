@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.5 (2026-11-24)
+
+- fix: **P0 SIGSEGV**——`db-postgres.grant` / `changePassword` 成功路径把 `(*OpError)(nil)` 装箱进 `error` 接口（类型化 nil），
+  `err != nil` 误判为真后 `classify` 解引用 nil 指针崩溃（r20-e2edb 真机 E2E 抓到 HTTP 502 / 4 次 panic）；
+  源头改为返回裸 nil，方法层用 `isNilError` 统一识别类型化 nil，`classify` / `errorText` / `execError` 全部加 nil 目标判空
+- fix: 修一类不修一点——`isNilError` 用 reflect 通用检测任意 nil 指针/接口装箱，六个写方法的执行面结果判断、
+  全部 `errors.As` 调用点（5 处）同步加固，堵住同类类型化 nil 崩溃
+- test: 新增 `internal/pgop/typednil_test.go` 回归闸门——显式构造类型化 nil 模拟崩溃现场，
+  断言 grant/changePassword 不 panic 且返回正确结果、classify/errorText 对类型化 nil 兜底；
+  修复前测试稳定 SIGSEGV、修复后全绿（红→绿闭环）。另补 A/B 副作用闸门：真实非 nil *OpError
+  仍被正常映射、参数校验失败仍在 exec 前拒绝，证明 isNilError 加固未吞掉正常错误路径
+- chore(release): 版本 bump 0.3.4 → 0.3.5（运行时行为修复，G-17 发版纪律）
+
 ## 0.3.4 (2026-11-24)
 
 - chore(depth_level): `production` → `basic`，依据 `PLUGIN-CATALOG.md` §6.1 升级判据——升 `production` 要求

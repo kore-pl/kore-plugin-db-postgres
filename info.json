@@ -1,7 +1,7 @@
 {
   "id": "db-postgres",
   "name": "PostgreSQL 管理插件",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "protocol": "kore.plugin.v1",
   "lifecycle": "lazy",
   "depth_level": "basic",
@@ -38,5 +38,5 @@
   "scenario_tags": [
     "data"
   ],
-  "size_bytes": 1569469
+  "size_bytes": 1570903
 }

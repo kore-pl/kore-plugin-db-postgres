@@ -184,7 +184,12 @@ func (c *Client) Grant(instance InstanceConfig, user, database string, privilege
 	if count == 0 {
 		return opErrorf(pluginapi.E_NOTFOUND, "数据库 %q 不存在", database)
 	}
-	return c.execDDL(instance, grantSQL(user, database, privileges, withGrantOption))
+	// 成功路径必须返回裸 nil：直接 return *OpError 会把类型化 nil 装进 error 接口，
+	// 调用方 err != nil 为真，classify 的 errors.As 命中后解引用 nil 会 SIGSEGV。
+	if perr := c.execDDL(instance, grantSQL(user, database, privileges, withGrantOption)); perr != nil {
+		return perr
+	}
+	return nil
 }
 
 // ChangePassword 改密：ALTER ROLE ... WITH PASSWORD，口令只出现在 stdin 流里。
@@ -205,5 +210,9 @@ func (c *Client) ChangePassword(instance InstanceConfig, user, password string) 
 	if count == 0 {
 		return opErrorf(pluginapi.E_NOTFOUND, "角色 %q 不存在", user)
 	}
-	return c.execDDL(instance, alterPasswordSQL(user, password))
+	// 与 Grant 同理：成功返回裸 nil，杜绝 (*OpError)(nil) 装箱成非 nil error。
+	if perr := c.execDDL(instance, alterPasswordSQL(user, password)); perr != nil {
+		return perr
+	}
+	return nil
 }
