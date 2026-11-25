@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Plugin zur PostgreSQL-Verwaltung",
+    "description": "Dieses Plugin verbindet sich tatsächlich mit PostgreSQL-Instanzen, listet Datenbanken (mit Größen), führt schreibgeschütztes SQL aus, liest Statusmetriken und langsame Abfragen und bietet einen UI-konfigurierbaren Verbindungsvertrag, der beim Speichern wirksam wird; seit 0.4.0 kommen Backup/Restore hinzu (pg_dump Custom-Archiv oder Klartext-SQL, pg_restore / psql; Restore erfordert confirm=true und automatischen Snapshot der Zieldatenbank). Es bringt keinen PostgreSQL-Treiber und keine Client-Binaries mit: die Ausführungsebene ist ein `psql`-Subprozess des Hosts, mit Rückfall auf `docker exec <Container> psql`, wenn `psql` lokal fehlt.",
+    "detail": "docs/DETAIL.de.md"
+  }
+}

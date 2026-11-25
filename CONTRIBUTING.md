@@ -62,3 +62,18 @@
 - 发现漏洞**不要开公开 issue**，按 [SECURITY.md](SECURITY.md) 私下披露。
 - 参与即表示同意 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
 - 能力声明与宿主写入面（文件、进程、网络、数据库等）按真实实现写；不得声明未实现的权限，也不得在文档里承诺未实现的能力。
+
+## 5. 分支模型与 Git Flow（本地约定）
+
+本仓使用 Git Flow 的本地约定，默认分支为 `main`，本地另建 `develop`（**不 push develop、不改 GitHub 默认分支**）：
+
+- `main`：只接收发版合流，不直接提交功能。
+- `develop`：集成分支，日常开发基于它；**本地创建，不推送远端**。
+- `feature/<kebab-case-name>` / `fix/<kebab-case-name>`：从 `develop` 开出，完成后合回 `develop`。
+- `release/<vX.Y.Z>` / `hotfix/<vX.Y.Z>`：必须**双向合流**到 `main` 与 `develop`，合并统一用 `--no-ff` 保留合并提交，避免漏回灌导致已修缺陷被下次 release 带回。
+- 分支与目录命名一律 **kebab-case**（全小写、连字符分隔），例如 `feature/config-contract`。
+- **禁止 force push、禁止 rebase、禁止直推 `main`**；标签按语义化版本 `vMAJOR.MINOR.PATCH`，使用 SSH 签名 tag（`git tag -s`）。
+
+### SSH 签名约定
+
+本仓本地已配置 SSH 签名：`gpg.format=ssh`、`user.signingkey` 指向 GitHub 账号的 ed25519 公钥、`tag.gpgSign=true`、`gpg.ssh.allowedSignersFile=.git/allowed_signers`。发版用 `git tag -s vX.Y.Z -m "中文说明"`，可用 `git tag -v vX.Y.Z` 验证到 `Good "git" signature`；历史 tag 不动、不重签。提交用 `git commit -s` 签 DCO。

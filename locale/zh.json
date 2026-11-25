@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "PostgreSQL 管理插件",
+    "description": "本插件真实连接 PostgreSQL 实例、列库（含大小）、执行只读 SQL、读状态指标与慢查询，并提供「界面可配、保存即生效」的连接配置契约；0.4.0 起补齐备份/恢复（pg_dump 自定义归档或纯文本、pg_restore / psql，恢复强制 confirm=true 且自动快照目标库）。不引入任何 PostgreSQL driver、不内置客户端二进制：执行面是宿主机 `psql` 子进程，本机没有 `psql` 时回退到 `docker exec <容器> psql`。",
+    "detail": "docs/DETAIL.md"
+  }
+}

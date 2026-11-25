@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Complemento de gestión PostgreSQL",
+    "description": "Este complemento se conecta realmente a instancias PostgreSQL, lista bases de datos (con tamaño), ejecuta SQL de solo lectura, lee métricas de estado y consultas lentas, y ofrece un contrato de conexión configurable en la interfaz que surte efecto al guardar; desde 0.4.0 añade copia de seguridad/restauración (pg_dump archivo personalizado o SQL plano, pg_restore / psql; restaurar exige confirm=true y snapshot automático de la base destino). No incluye ningún driver PostgreSQL ni binarios de cliente: la capa de ejecución es un subproceso `psql` del host, con respaldo a `docker exec <contenedor> psql` si no hay `psql` local.",
+    "detail": "docs/DETAIL.es.md"
+  }
+}

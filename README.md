@@ -1,5 +1,7 @@
 # kore-plugin-db-postgres
 
+语言：[简体中文](docs/DETAIL.md) · [English](docs/DETAIL.en.md) · [Español](docs/DETAIL.es.md) · [Français](docs/DETAIL.fr.md) · [Deutsch](docs/DETAIL.de.md) · [Русский](docs/DETAIL.ru.md) · [Português](docs/DETAIL.pt.md)
+
 PostgreSQL 管理插件：**真实连接**实例、列库（含大小）、执行只读 SQL、读状态指标，并提供「界面可配、保存即生效」的连接配置契约。
 
 - 深度等级 `basic`（核心路径可用；边界用例与 G-20 要求的四类故障注入尚未全量覆盖，按升级判据计 basic 并延 v1.1——不是功能降级）：只读路径（配置 / 探测 / 库列表 / 只读查询 / 状态 / 慢查询）+ 日常写操作（建删库、建删用户、授权、改密）均已实现；备份恢复仍不在本版范围。
@@ -147,3 +149,7 @@ make build && make dist
 - **相关仓库**：[索引 kore-plugins](https://github.com/kore-pl/kore-plugins) · [协议文档](https://github.com/kore-pl/kore/blob/main/docs/PLUGIN-PROTOCOL.md) · [SDK 指南](https://github.com/kore-pl/kore/blob/main/docs/PLUGIN-SDK.md)
 
 <!-- oss:end -->
+
+## 支持本项目
+
+如果这个项目对你有帮助，欢迎在 GitHub 仓库右上角点个 ⭐ Star——你的支持是作者持续维护的动力。也欢迎提 issue、PR 或参与讨论。

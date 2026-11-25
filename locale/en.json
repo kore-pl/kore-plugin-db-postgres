@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "PostgreSQL management plugin",
+    "description": "This plugin really connects to PostgreSQL instances, lists databases (with sizes), runs read-only SQL, reads status metrics and slow queries, and offers a UI-configurable connection contract that takes effect on save; since 0.4.0 it adds backup/restore (pg_dump custom archive or plain SQL, pg_restore / psql, restore requires confirm=true and auto-snapshots the target database). It brings no PostgreSQL driver and bundles no client binaries: the execution surface is a host `psql` subprocess, falling back to `docker exec <container> psql` when `psql` is absent locally.",
+    "detail": "docs/DETAIL.en.md"
+  }
+}
