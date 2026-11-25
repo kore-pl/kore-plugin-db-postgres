@@ -1,7 +1,7 @@
 {
   "id": "db-postgres",
   "name": "PostgreSQL 管理插件",
-  "version": "0.3.5",
+  "version": "0.4.0",
   "protocol": "kore.plugin.v1",
   "lifecycle": "lazy",
   "depth_level": "basic",
@@ -22,7 +22,12 @@
     "db-postgres.createUser": "system:admin",
     "db-postgres.dropUser": "system:admin",
     "db-postgres.grant": "system:admin",
-    "db-postgres.changePassword": "system:admin"
+    "db-postgres.changePassword": "system:admin",
+    "db-postgres.backup": "system:admin",
+    "db-postgres.restore": "system:admin",
+    "db-postgres.backupList": "system:read",
+    "db-postgres.backupDelete": "system:admin",
+    "db-postgres.backupDownload": "system:admin"
   },
   "triggers": [],
   "requires_kore": ">=0.1.0 <0.2.0",
@@ -38,5 +43,5 @@
   "scenario_tags": [
     "data"
   ],
-  "size_bytes": 1570903
+  "size_bytes": 1671157
 }

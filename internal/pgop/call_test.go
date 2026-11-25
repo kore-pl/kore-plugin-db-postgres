@@ -35,6 +35,13 @@ type fakeExec struct {
 	// created 是写方法的返回预设；gotAdmin 记录写方法收到的入参。
 	created  bool
 	gotAdmin []string
+	// 备份/恢复：记录入参并返回预设结果或错误。
+	backupSpec  BackupSpec
+	restoreSpec RestoreSpec
+	backupSize  int64
+	backupErr   error
+	restoreErr  error
+	backupCalls int
 }
 
 func (f *fakeExec) Instances(instances []InstanceConfig) ([]InstanceStatus, error) {
@@ -84,6 +91,25 @@ func (f *fakeExec) Grant(instance InstanceConfig, user, database string, privile
 func (f *fakeExec) ChangePassword(instance InstanceConfig, user, password string) error {
 	f.gotAdmin = append(f.gotAdmin, "changePassword:"+user+":"+password)
 	return f.err
+}
+
+// Backup / Restore 记录入参；不创建文件（真实文件由方法层或测试自行准备）。
+func (f *fakeExec) Backup(instance InstanceConfig, spec BackupSpec) (BackupData, error) {
+	f.backupCalls++
+	f.backupSpec = spec
+	if f.backupErr != nil {
+		return BackupData{}, f.backupErr
+	}
+	size := f.backupSize
+	if size == 0 {
+		size = 4096
+	}
+	return BackupData{SizeBytes: size, Format: spec.Format, Compression: "test"}, nil
+}
+
+func (f *fakeExec) Restore(instance InstanceConfig, spec RestoreSpec) error {
+	f.restoreSpec = spec
+	return f.restoreErr
 }
 
 // TestCallInstances 实例探测结果结构化：单实例失败不抹掉其它实例。

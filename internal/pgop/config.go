@@ -31,6 +31,13 @@ const (
 	EnvConnectTimeout = "KORE_PG_CONNECT_TIMEOUT"
 	// EnvQueryTimeout 覆盖 db-postgres.query 的整体预算。
 	EnvQueryTimeout = "KORE_PG_TIMEOUT"
+	// EnvDumpBin 覆盖 pg_dump 客户端路径（缺省 PATH 中的 pg_dump）。
+	EnvDumpBin = "KORE_PG_DUMP_BIN"
+	// EnvRestoreBin 覆盖 pg_restore 客户端路径（缺省 PATH 中的 pg_restore）。
+	EnvRestoreBin = "KORE_PG_RESTORE_BIN"
+	// EnvExportDir 覆盖备份文件的白名单根目录（必须是绝对路径）。
+	// 与 db-mysql 共用同一个环境变量名：同一台机器上两个域看到同一个备份目录。
+	EnvExportDir = "KORE_DB_EXPORT_DIR"
 
 	// DefaultInstanceName 是配置契约描述的默认实例名。
 	DefaultInstanceName = "default"
@@ -47,6 +54,9 @@ const (
 	maxInstances        = 64
 	// maxDatabases 限制库列表条目数（PostgreSQL 单实例不会超过这个量级）。
 	maxDatabases = 4096
+
+	// DefaultExportDirName 是未配置 KORE_DB_EXPORT_DIR 时相对插件状态目录的子目录名。
+	DefaultExportDirName = "exports"
 )
 
 // ClientSettings 是执行通道与超时设置（与实例表分开，config.set 不重建通道）。
@@ -92,6 +102,35 @@ func parseTimeout(raw, key string) (time.Duration, error) {
 		return 0, fmt.Errorf("%s=%q 非法：须为 (0, %s] 的 Go 时长（如 5s）", key, raw, maxTimeout)
 	}
 	return parsed, nil
+}
+
+// LoadDumpBin 读取 pg_dump 客户端路径（KORE_PG_DUMP_BIN，缺省 PATH 中的 pg_dump）。
+func LoadDumpBin() string {
+	if bin := strings.TrimSpace(os.Getenv(EnvDumpBin)); bin != "" {
+		return bin
+	}
+	return defaultDumpBin
+}
+
+// LoadRestoreBin 读取 pg_restore 客户端路径（KORE_PG_RESTORE_BIN，缺省 PATH 中的 pg_restore）。
+func LoadRestoreBin() string {
+	if bin := strings.TrimSpace(os.Getenv(EnvRestoreBin)); bin != "" {
+		return bin
+	}
+	return defaultRestoreBin
+}
+
+// ResolveExportDir 解析备份文件的白名单根：
+// KORE_DB_EXPORT_DIR 优先；否则 <KORE_STATE_DIR>/exports；两者都没有时返回空串，
+// 由方法层给出可操作的 E_INVALID（而不是写相对路径）。
+func ResolveExportDir(stateDir string) string {
+	if dir := strings.TrimSpace(os.Getenv(EnvExportDir)); dir != "" {
+		return dir
+	}
+	if dir := strings.TrimSpace(stateDir); dir != "" {
+		return filepath.Join(dir, DefaultExportDirName)
+	}
+	return ""
 }
 
 // LoadEnvInstances 读取 KORE_PG_INSTANCES / KORE_PG_CONFIG / <root>/instances.json

@@ -127,6 +127,9 @@ func loadConfig() (config, error) {
 		ConnectTimeout:  settings.ConnectTimeout,
 		QueryTimeout:    settings.QueryTimeout,
 		IncludeSystem:   values.DatabasesIncludeSystem,
+		DumpBin:         pgop.LoadDumpBin(),
+		RestoreBin:      pgop.LoadRestoreBin(),
+		ExportDir:       pgop.ResolveExportDir(stateDir),
 	}
 	if envErr != nil {
 		pgCfg.Err = envErr

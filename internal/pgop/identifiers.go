@@ -33,6 +33,12 @@ const (
 // 大小写保留（带引号的标识符区分大小写），需要空格/连字符/Unicode 的名字不在 v1 范围。
 var roleNameRE = regexp.MustCompile(`^[a-zA-Z0-9_]{1,63}$`)
 
+// tablePatternRE 是表级备份允许的表名形状：table 或 schema.table。
+//
+// 不放行 pg_dump 的 % / * 通配符：备份范围必须是用户明确点出的对象，
+// 通配符会把「备份一张表」变成「备份一个 schema」，属于用户没同意的范围扩大。
+var tablePatternRE = regexp.MustCompile(`^[a-zA-Z0-9_]{1,63}(\.[a-zA-Z0-9_]{1,63})?$`)
+
 // protectedDatabases 是禁止 DROP 的系统库（比较时忽略大小写，防止 "Postgres" 绕过）。
 var protectedDatabases = map[string]struct{}{
 	"postgres":  {},
@@ -66,6 +72,17 @@ func ValidateRoleName(name string) error {
 	}
 	if !roleNameRE.MatchString(name) {
 		return errors.New("用户名非法：只允许字母、数字与下划线，长度 1-63")
+	}
+	return nil
+}
+
+// validateTablePattern 校验表级备份的单个表名（table 或 schema.table）。
+func validateTablePattern(name string) error {
+	if name == "" {
+		return errors.New("表名不得为空")
+	}
+	if !tablePatternRE.MatchString(name) {
+		return errors.New("表名 " + name + " 非法：只允许「表名」或「schema.表名」，各段只含字母、数字与下划线，长度 1-63")
 	}
 	return nil
 }

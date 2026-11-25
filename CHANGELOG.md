@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0 (2026-11-25)
+
+- feat: **补齐 PG 备份/恢复（竞品清单条目 8，与 db-mysql 的 export/import 对齐）**——新增 5 个方法：
+  `db-postgres.backup`（pg_dump：custom 归档 / 纯文本 SQL、库级或表级、可选仅结构、压缩级别 1-9 或 0 不压缩、
+  缺省文件名 `<库>-<时间戳>.dump|.sql.gz`）、`db-postgres.restore`（custom 走 pg_restore with
+  --clean --if-exists --single-transaction --no-owner --no-privileges；纯文本走 psql 且 stdin 首尾包 BEGIN/COMMIT
+  保证原子性；**强制 confirm=true**，恢复前**自动快照**目标库（`<库>-prerestore-<时间戳>.dump`，可显式关闭），
+  目标库不存在时可勾选自动建库）、`db-postgres.backupList` / `backupDelete` / `backupDownload`
+  （分块 base64 4 MiB，前端拼 Blob 另存）
+- feat(web): 数据库页 PostgreSQL 侧启用「备份 / 恢复备份 / 备份文件」入口（`web/db.js` + `web/db-l2.js`）：
+  库行「备份」、工具栏「恢复备份」、备份文件弹窗（列表 / 下载 / 恢复 / 删除），删除与恢复都要再走一层确认；
+  MySQL 侧原导出/导入行为不变
+- security: **零 shell 注入面**——pg_dump / pg_restore / psql 全部固定 argv，库名只作最后的位置参数、表名只经
+  `--table=`，口令只经 PGPASSWORD（psql 模式）或 stdin 首行（docker exec 模式），不进 argv / ps / 日志；
+  备份路径必须落在 `KORE_DB_EXPORT_DIR`（缺省 `<state>/exports`，与 db-mysql 共用同一根）内，
+  词法 + 符号链接二次归属校验，失败不留半份文件
+- fix(ux): 备份列表按文件头识别并跳过 mysqldump 产物——同一目录下 MySQL 的 .sql 不会出现在 PG 备份列表里，
+  避免用户点到一份恢复必然失败的备份
+- chore(release): 版本 bump 0.3.5 → 0.4.0（新增方法面，minor）
+
 ## 0.3.5 (2026-11-24)
 
 - fix: **P0 SIGSEGV**——`db-postgres.grant` / `changePassword` 成功路径把 `(*OpError)(nil)` 装箱进 `error` 接口（类型化 nil），

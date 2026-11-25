@@ -46,6 +46,16 @@ func Call(method string, params json.RawMessage, cfg Config, exec Executor) (jso
 		return callGrant(params, cfg, exec)
 	case "changePassword":
 		return callChangePassword(params, cfg, exec)
+	case "backup":
+		return callBackup(params, cfg, exec)
+	case "restore":
+		return callRestore(params, cfg, exec)
+	case "backupList":
+		return callBackupList(params, cfg)
+	case "backupDelete":
+		return callBackupDelete(params, cfg)
+	case "backupDownload":
+		return callBackupDownload(params, cfg)
 	}
 	return nil, errNotFound(method)
 }
@@ -61,7 +71,8 @@ func businessVerb(method string) (string, bool) {
 	}
 	switch verb {
 	case "instances", "databases", "query", "status", "slowlog",
-		"createDatabase", "dropDatabase", "createUser", "dropUser", "grant", "changePassword":
+		"createDatabase", "dropDatabase", "createUser", "dropUser", "grant", "changePassword",
+		"backup", "restore", "backupList", "backupDelete", "backupDownload":
 		return verb, true
 	}
 	return "", false
@@ -84,6 +95,27 @@ func findInstance(cfg Config, name string) (InstanceConfig, *pluginapi.Error) {
 		Code:    pluginapi.E_NOTFOUND,
 		Message: fmt.Sprintf("未配置实例 %q（已配置: %s）", name, configuredNames(cfg)),
 	}
+}
+
+// resolveInstance 按名字取实例；名字为空时优先 default，其次唯一实例，
+// 多于一个时要求显式指定。与 db-mysql 的 resolveInstance 同口径：
+// 备份/恢复这类「目录级」操作允许省略 instance（页面始终会带上当前选中的连接）。
+func resolveInstance(cfg Config, name string) (InstanceConfig, *pluginapi.Error) {
+	if name != "" {
+		return findInstance(cfg, name)
+	}
+	if len(cfg.Instances) == 0 {
+		return InstanceConfig{}, invalid("未配置 PostgreSQL 实例：请先在设置里填写数据库地址并按需保存")
+	}
+	for _, instance := range cfg.Instances {
+		if instance.Name == DefaultInstanceName {
+			return instance, nil
+		}
+	}
+	if len(cfg.Instances) == 1 {
+		return cfg.Instances[0], nil
+	}
+	return InstanceConfig{}, invalid("存在多个实例，请用 instance 指定目标实例")
 }
 
 // configuredNames 返回已配置实例名摘要，用于 E_NOTFOUND 提示（不含主机/密码）。

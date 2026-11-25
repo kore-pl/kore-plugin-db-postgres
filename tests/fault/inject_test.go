@@ -52,6 +52,14 @@ func (f faultExecutor) ChangePassword(pgop.InstanceConfig, string, string) error
 	return pgop.NewFaultError(f.kind, "changePassword 执行面故障")
 }
 
+func (f faultExecutor) Backup(pgop.InstanceConfig, pgop.BackupSpec) (pgop.BackupData, error) {
+	return pgop.BackupData{}, pgop.NewFaultError(f.kind, "backup 执行面故障")
+}
+
+func (f faultExecutor) Restore(pgop.InstanceConfig, pgop.RestoreSpec) error {
+	return pgop.NewFaultError(f.kind, "restore 执行面故障")
+}
+
 // assertFault 对十一个真实方法断言同一类故障的协议码与关键词。
 func assertFault(t *testing.T, kind pgop.FaultKind, wantCode, wantHint string) {
 	t.Helper()

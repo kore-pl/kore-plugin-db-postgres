@@ -302,6 +302,12 @@ func TestInfoMethodCapabilities(t *testing.T) {
 		"db-postgres.status":     "system:read",
 		"db-postgres.slowlog":    "system:read",
 
+		"db-postgres.backupList":     "system:read",
+		"db-postgres.backup":         "system:admin",
+		"db-postgres.restore":        "system:admin",
+		"db-postgres.backupDelete":   "system:admin",
+		"db-postgres.backupDownload": "system:admin",
+
 		"db-postgres.config.set":     "system:admin",
 		"db-postgres.createDatabase": "system:admin",
 		"db-postgres.dropDatabase":   "system:admin",

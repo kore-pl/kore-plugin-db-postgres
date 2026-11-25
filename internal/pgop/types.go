@@ -81,6 +81,12 @@ type Config struct {
 	PsqlBin         string
 	DockerBin       string
 	DockerContainer string
+	// DumpBin / RestoreBin 是 pg_dump 与 pg_restore 可执行文件（缺省走 PATH）。
+	DumpBin    string
+	RestoreBin string
+	// ExportDir 是备份文件的白名单根目录（KORE_DB_EXPORT_DIR，缺省 <state>/exports）。
+	// 与 db-mysql 共用同一根：切换数据库类型时「备份到哪 / 从哪恢复」不变。
+	ExportDir string
 	// ConnectTimeout 是元数据方法（instances/databases/status）的整体预算。
 	ConnectTimeout time.Duration
 	// QueryTimeout 是 db-postgres.query 的整体预算。
@@ -108,6 +114,10 @@ type Executor interface {
 	DropRole(instance InstanceConfig, user string) (bool, error)
 	Grant(instance InstanceConfig, user, database string, privileges []string, withGrantOption bool) error
 	ChangePassword(instance InstanceConfig, user, password string) error
+
+	// Backup / Restore 是备份与恢复的执行面（pg_dump / pg_restore / psql）。
+	Backup(instance InstanceConfig, spec BackupSpec) (BackupData, error)
+	Restore(instance InstanceConfig, spec RestoreSpec) error
 }
 
 // InstancesResult 是 db-postgres.instances 的结构化结果。
