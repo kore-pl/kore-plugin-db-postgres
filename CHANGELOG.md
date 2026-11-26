@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2 (2026-11-26)
+
+- fix(ux): 按 G-33 A3 清理 28 条 `invalid()` 错误文案（call.go / identifiers.go / query.go / sqlguard.go / methods.go），
+  统一改成「白话现象 + 请/需要 + 具体动作」并保留字段名与动态错误尾段；同步更新 sqlguard_test 里的文案断言
+- chore(release): 版本 bump 0.4.1 → 0.4.2（文案进入二进制，dist sha 变更，patch bump）
+
 ## 0.4.1 (2026-11-25)
 
 - docs(l10n): 新增 zh/en/es/fr/de/ru/pt 七语 locale 与 docs/DETAIL 文档，README 顶部加语言切换行（无日语、无 ja 文件）

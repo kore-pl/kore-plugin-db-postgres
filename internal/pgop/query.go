@@ -22,7 +22,7 @@ func callQuery(raw json.RawMessage, cfg Config, exec Executor) (json.RawMessage,
 		return nil, perr
 	}
 	if strings.TrimSpace(p.SQL) == "" {
-		return nil, invalid("缺少必填参数 sql")
+		return nil, invalid("请填写必填参数 sql（要查询的 SQL 语句）")
 	}
 	if perr := ValidateReadOnlySQL(p.SQL); perr != nil {
 		return nil, perr
@@ -32,7 +32,7 @@ func callQuery(raw json.RawMessage, cfg Config, exec Executor) (json.RawMessage,
 	case limit == 0:
 		limit = defaultQueryLimit
 	case limit < 0 || limit > maxQueryLimit:
-		return nil, invalid("limit 超出 [0, 1000] 范围")
+		return nil, invalid("limit 超出 0 到 1000 的范围，请改成范围内的值")
 	}
 	instance, perr := findInstance(cfg, p.Instance)
 	if perr != nil {

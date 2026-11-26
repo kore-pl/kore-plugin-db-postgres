@@ -70,39 +70,39 @@ var forbiddenFunctionsRE = regexp.MustCompile(`(?i)\b(` +
 // 加锁读、SELECT INTO、阻塞与副作用函数。
 func ValidateReadOnlySQL(sql string) *pluginapi.Error {
 	if strings.TrimSpace(sql) == "" {
-		return invalid("sql 不得为空")
+		return invalid("请填写要查询的 SQL 语句，不能为空")
 	}
 	if len(sql) > maxSQLBytes {
-		return invalid("sql 超过 64 KiB 上限")
+		return invalid("SQL 语句超过 64 KiB，请缩短后再试")
 	}
 	if strings.ContainsRune(sql, 0) {
-		return invalid("sql 含 NUL 字节")
+		return invalid("SQL 语句含 NUL 空字符，请去掉后重试")
 	}
 	sanitized, err := sanitizeSQL(sql)
 	if err != nil {
-		return invalid("sql 非法: " + err.Error())
+		return invalid("SQL 语句格式有误，请检查: " + err.Error())
 	}
 	statement := strings.TrimSpace(sanitized)
 	if statement == "" {
-		return invalid("sql 不得为空")
+		return invalid("请填写要查询的 SQL 语句，不能为空")
 	}
 	// 允许且仅允许一个结尾分号；其余分号都视为多语句。
 	if strings.HasSuffix(statement, ";") {
 		statement = strings.TrimSpace(strings.TrimSuffix(statement, ";"))
 	}
 	if strings.Contains(statement, ";") {
-		return invalid("只允许单条只读语句，禁止多条语句（分号只能出现在末尾）")
+		return invalid("请一次只提交一条只读语句，分号只能放在末尾")
 	}
 	leading := firstKeyword(statement)
 	if _, ok := readOnlyLeadingKeywords[leading]; !ok {
-		return invalid("只读白名单拒绝: 语句必须以 SELECT/SHOW/EXPLAIN/WITH 开头")
+		return invalid("只读查询请求：语句请以 SELECT/SHOW/EXPLAIN/WITH 开头")
 	}
 	scannable := statement
 	if leading == "EXPLAIN" {
 		inner := stripExplainPrefix(statement[len(leading):])
 		innerLeading := firstKeyword(inner)
 		if _, ok := explainInnerKeywords[innerLeading]; !ok {
-			return invalid("只读白名单拒绝: EXPLAIN 只允许分析 SELECT/WITH/VALUES/TABLE（EXPLAIN ANALYZE 会真的执行内层语句）")
+			return invalid("只读查询请求：EXPLAIN 请只用于分析 SELECT/WITH/VALUES/TABLE（用 ANALYZE 会真的执行里面的语句）")
 		}
 		scannable = inner
 	}
@@ -111,21 +111,21 @@ func ValidateReadOnlySQL(sql string) *pluginapi.Error {
 	scanWrites := leading == "WITH" || (leading == "EXPLAIN" && firstKeyword(scannable) == "WITH")
 	if scanWrites {
 		if match := dataModifyingRE.FindString(upper); match != "" {
-			return invalid("只读白名单拒绝: WITH 子句含数据修改语句 " + match)
+			return invalid("只读查询请求：WITH 子句里请勿写修改数据的语句 " + match)
 		}
 	}
 	if leading != "SHOW" {
 		if selectIntoRE.MatchString(upper) {
-			return invalid("只读白名单拒绝: 禁止 SELECT ... INTO（会建表）")
+			return invalid("只读查询请求：不允许 SELECT ... INTO（会建表），请去掉 INTO")
 		}
 	}
 	if lockClauseRE.MatchString(strings.ToUpper(scannable)) {
-		return invalid("只读白名单拒绝: 禁止加锁读 FOR UPDATE / FOR SHARE")
+		return invalid("只读查询请求：不允许 FOR UPDATE / FOR SHARE 加锁读，请去掉加锁子句")
 	}
 	if match := forbiddenFunctionsRE.FindString(sanitizeSQLForFunctions(sql)); match != "" {
 		// 报错用小写函数名（真实写法），而不是内部大写化的文本。
 		name := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(match, "(")))
-		return invalid("只读白名单拒绝: 禁止副作用/阻塞函数 " + name)
+		return invalid("只读查询请求：请去掉有副作用或会阻塞的函数 " + name)
 	}
 	return nil
 }

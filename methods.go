@@ -99,25 +99,25 @@ func handleConfigSet(params json.RawMessage, cfg *config) (json.RawMessage, *plu
 		return nil, perr
 	}
 	if len(p.Values) == 0 || string(p.Values) == "null" || p.Values[0] != '{' {
-		return nil, invalid("values 必须是 JSON 对象")
+		return nil, invalid("values 需要是 JSON 对象，请传 {...} 格式")
 	}
 	// 显式传 port=0 属于越界（schema min=1）；只有文件里缺少该字段才按默认 5432 处理。
 	var probe struct {
 		Port *int `json:"port"`
 	}
 	if err := json.Unmarshal(p.Values, &probe); err == nil && probe.Port != nil && *probe.Port < 1 {
-		return nil, invalid("端口必须在 1-65535 之间，不能填 0")
+		return nil, invalid("端口请填 1 到 65535 之间的数字，不能填 0")
 	}
 	merged := cfg.values
 	if err := strictDecode(p.Values, &merged); err != nil {
-		return nil, invalid("配置值非法: " + err.Error())
+		return nil, invalid("配置值无效，请检查后重试: " + err.Error())
 	}
 	if merged.Password == plugincfg.SensitivePlaceholder {
 		merged.Password = cfg.values.Password
 	}
 	normalized, err := validateValues(merged)
 	if err != nil {
-		return nil, invalid("PostgreSQL 设置非法: " + err.Error())
+		return nil, invalid("PostgreSQL 设置无效，请按提示修改: " + err.Error())
 	}
 	if cfg.store == nil || cfg.store.Path() == "" {
 		return nil, internalErr("KORE_STATE_DIR 未设置，无法保存插件配置")
@@ -161,13 +161,13 @@ func pingResult(cfg config) json.RawMessage {
 func decodeParams(raw json.RawMessage, target any) *pluginapi.Error {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || string(trimmed) == "null" {
-		return invalid("缺少必填参数对象")
+		return invalid("请传入参数对象 params（不能为空或 null）")
 	}
 	if trimmed[0] != '{' {
-		return invalid("params 必须是 JSON 对象")
+		return invalid("params 需要是 JSON 对象，请传 {...} 格式")
 	}
 	if err := json.Unmarshal(trimmed, target); err != nil {
-		return invalid("params 解析失败: " + err.Error())
+		return invalid("params 解析失败，请检查 JSON 格式: " + err.Error())
 	}
 	return nil
 }

@@ -81,7 +81,7 @@ func businessVerb(method string) (string, bool) {
 // findInstance 按名字取实例配置；名字非法返回 E_INVALID，未配置返回 E_NOTFOUND。
 func findInstance(cfg Config, name string) (InstanceConfig, *pluginapi.Error) {
 	if name == "" {
-		return InstanceConfig{}, invalid("缺少必填参数 instance")
+		return InstanceConfig{}, invalid("请填写必填参数 instance（要操作的数据库连接名称）")
 	}
 	if err := validateInstanceName(name); err != nil {
 		return InstanceConfig{}, invalid(err.Error())
@@ -188,13 +188,13 @@ func unsupported(msg string) *pluginapi.Error {
 func decodeParams(raw json.RawMessage, target any) *pluginapi.Error {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || string(trimmed) == "null" {
-		return invalid("缺少必填参数对象")
+		return invalid("请传入参数对象 params（不能为空或 null）")
 	}
 	if trimmed[0] != '{' {
-		return invalid("params 必须是 JSON 对象")
+		return invalid("params 需要是 JSON 对象，请传 {...} 格式")
 	}
 	if err := json.Unmarshal(trimmed, target); err != nil {
-		return invalid("params 解析失败: " + err.Error())
+		return invalid("params 解析失败，请检查 JSON 格式: " + err.Error())
 	}
 	return nil
 }

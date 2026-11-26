@@ -120,10 +120,10 @@ func quoteLiteral(value string) string {
 // normalizePrivileges 把入参权限归一化为大写白名单值并去重（保持入参顺序）。
 func normalizePrivileges(privileges []string) ([]string, *pluginapi.Error) {
 	if len(privileges) == 0 {
-		return nil, invalid("缺少必填参数 privileges（可选值: " + grantPrivilegeOrder + "）")
+		return nil, invalid("请填写必填参数 privileges（权限，可选值: " + grantPrivilegeOrder + "）")
 	}
 	if len(privileges) > maxGrantPrivileges {
-		return nil, invalid("privileges 条数超过上限 8")
+		return nil, invalid("权限 privileges 最多填 8 项，请减少后再试")
 	}
 	normalized := make([]string, 0, len(privileges))
 	seen := make(map[string]struct{}, len(privileges))
@@ -131,7 +131,7 @@ func normalizePrivileges(privileges []string) ([]string, *pluginapi.Error) {
 		key := strings.ToUpper(strings.TrimSpace(raw))
 		canonical, ok := databaseGrantPrivileges[key]
 		if !ok {
-			return nil, invalid("权限 " + raw + " 不在白名单内（可选值: " + grantPrivilegeOrder + "）")
+			return nil, invalid("请检查填写的权限 " + raw + " 不在白名单内（可选值: " + grantPrivilegeOrder + "）")
 		}
 		if _, dup := seen[canonical]; dup {
 			continue
