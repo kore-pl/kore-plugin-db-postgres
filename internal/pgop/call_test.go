@@ -30,6 +30,7 @@ type fakeExec struct {
 
 	gotSQL    string
 	gotLimit  int
+	gotDB     string
 	instances []InstanceConfig
 	include   bool
 	// created 是写方法的返回预设；gotAdmin 记录写方法收到的入参。
@@ -54,15 +55,15 @@ func (f *fakeExec) Databases(instance InstanceConfig, includeSystem bool) ([]Dat
 	return f.databases, f.err
 }
 
-func (f *fakeExec) Query(instance InstanceConfig, sql string, limit int) (QueryResult, error) {
-	f.gotSQL, f.gotLimit = sql, limit
+func (f *fakeExec) Query(instance InstanceConfig, sql, database string, limit int) (QueryResult, error) {
+	f.gotSQL, f.gotDB, f.gotLimit = sql, database, limit
 	return f.query, f.err
 }
 
 // Exec 记录写语句入参（与 Query 共用 gotSQL/gotLimit 与 query 预设），
 // 供 callExec 单测断言「拒绝路径不触达执行面」与「合法写语句执行参数正确」。
-func (f *fakeExec) Exec(instance InstanceConfig, sql string, limit int) (QueryResult, error) {
-	f.gotSQL, f.gotLimit = sql, limit
+func (f *fakeExec) Exec(instance InstanceConfig, sql, database string, limit int) (QueryResult, error) {
+	f.gotSQL, f.gotDB, f.gotLimit = sql, database, limit
 	return f.query, f.err
 }
 
@@ -271,6 +272,67 @@ func TestCallQueryEmptySQL(t *testing.T) {
 	}
 	if _, perr := Call("db-postgres.query", nil, cfg, exec); perr == nil || perr.Code != pluginapi.E_INVALID {
 		t.Fatalf("缺 params 未被拒: %v", perr)
+	}
+}
+
+// TestCallQueryDatabase 参数 database 透传到执行面；缺省回落维护库；非法库名
+// 在触达执行面之前以 E_INVALID 拒绝（psql -d 注入防线，query 保持 system:read）。
+func TestCallQueryDatabase(t *testing.T) {
+	cfg := testConfig()
+	exec := &fakeExec{}
+	// 缺省回落 postgres。
+	if _, perr := Call("db-postgres.query", json.RawMessage(`{"instance":"default","sql":"SELECT 1"}`), cfg, exec); perr != nil {
+		t.Fatalf("缺省库调用失败: %v", perr)
+	}
+	if exec.gotDB != defaultDatabase {
+		t.Fatalf("缺省 database=%q，期望 %q", exec.gotDB, defaultDatabase)
+	}
+	// 业务库透传。
+	if _, perr := Call("db-postgres.query", json.RawMessage(`{"instance":"default","sql":"SELECT 1","database":"myapp"}`), cfg, exec); perr != nil {
+		t.Fatalf("业务库调用失败: %v", perr)
+	}
+	if exec.gotDB != "myapp" {
+		t.Fatalf("database=%q，期望 myapp", exec.gotDB)
+	}
+	// 注入库名：E_INVALID 且不触达执行面。
+	for _, bad := range []string{"myapp;DROP TABLE x", "my app", "-d postgres", `a"b`} {
+		before := exec.gotSQL
+		result, perr := Call("db-postgres.query",
+			mustJSON(t, map[string]any{"instance": "default", "sql": "SELECT 1", "database": bad}), cfg, exec)
+		if perr == nil || perr.Code != pluginapi.E_INVALID || result != nil {
+			t.Fatalf("database=%q 未被 E_INVALID 拒绝: %v", bad, perr)
+		}
+		if exec.gotSQL != before {
+			t.Fatalf("database=%q 被拒仍触达执行面: %q", bad, exec.gotSQL)
+		}
+	}
+}
+
+// TestCallExecDatabase exec 的 database 参数同样透传且校验；两级确认 / 白名单不变。
+func TestCallExecDatabase(t *testing.T) {
+	cfg := testConfig()
+	exec := &fakeExec{query: QueryResult{}}
+	// 业务库 + 合法确认。
+	if _, perr := Call("db-postgres.exec", json.RawMessage(`{"instance":"default","sql":"INSERT INTO t VALUES (1)","confirm":true,"database":"myapp"}`), cfg, exec); perr != nil {
+		t.Fatalf("exec 业务库调用失败: %v", perr)
+	}
+	if exec.gotDB != "myapp" {
+		t.Fatalf("exec database=%q，期望 myapp", exec.gotDB)
+	}
+	// 缺省回落。
+	if _, perr := Call("db-postgres.exec", json.RawMessage(`{"instance":"default","sql":"INSERT INTO t VALUES (1)","confirm":true}`), cfg, exec); perr != nil {
+		t.Fatalf("exec 缺省库调用失败: %v", perr)
+	}
+	if exec.gotDB != defaultDatabase {
+		t.Fatalf("exec 缺省 database=%q，期望 %q", exec.gotDB, defaultDatabase)
+	}
+	// 非法库名即使确认也拒绝，且不触达执行面。
+	before := exec.gotSQL
+	if _, perr := Call("db-postgres.exec", json.RawMessage(`{"instance":"default","sql":"INSERT INTO t VALUES (1)","confirm":true,"database":"bad;name"}`), cfg, exec); perr == nil || perr.Code != pluginapi.E_INVALID {
+		t.Fatalf("非法库名未被拒: %v", perr)
+	}
+	if exec.gotSQL != before {
+		t.Fatalf("非法库名被拒仍触达执行面: %q", exec.gotSQL)
 	}
 }
 

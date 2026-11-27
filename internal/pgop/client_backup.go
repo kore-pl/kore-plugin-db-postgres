@@ -76,7 +76,7 @@ func (c *Client) Backup(instance InstanceConfig, spec BackupSpec) (BackupData, e
 	if oerr != nil {
 		return BackupData{}, oerr
 	}
-	target, oerr := c.targetFor(instance, backend)
+	target, oerr := c.targetFor(instance, backend, spec.Database)
 	if oerr != nil {
 		return BackupData{}, oerr
 	}
@@ -152,7 +152,7 @@ func (c *Client) Restore(instance InstanceConfig, spec RestoreSpec) error {
 	if perr != nil {
 		return perr
 	}
-	target, perr := c.targetFor(instance, backend)
+	target, perr := c.targetFor(instance, backend, spec.Database)
 	if perr != nil {
 		return perr
 	}

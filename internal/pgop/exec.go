@@ -28,11 +28,15 @@ func callExec(raw json.RawMessage, cfg Config, exec Executor) (json.RawMessage, 
 	if perr != nil {
 		return nil, perr
 	}
+	database, perr := resolveDatabase(p.Database)
+	if perr != nil {
+		return nil, perr
+	}
 	instance, perr := findInstance(cfg, p.Instance)
 	if perr != nil {
 		return nil, perr
 	}
-	result, err := exec.Exec(instance, p.SQL, maxExecRows)
+	result, err := exec.Exec(instance, p.SQL, database, maxExecRows)
 	if err != nil {
 		return nil, classify(err)
 	}

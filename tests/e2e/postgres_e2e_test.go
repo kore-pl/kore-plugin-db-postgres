@@ -32,6 +32,8 @@ const (
 	e2ePort = 15432
 	// e2eTable 是 E2E 造的验证表。
 	e2eTable = "kore_e2e"
+	// bizDB 是 database 参数用例的业务库（独立于维护库 postgres）。
+	bizDB = "myapp"
 	// callTimeout 是单次方法调用的等待上限（含 docker exec 启动开销）。
 	callTimeout = 30 * time.Second
 )
@@ -391,6 +393,89 @@ func requireContainer(t *testing.T, container string) {
 		t.Skipf("容器 %s 未运行：docker run -d --name %s -p %d:5432 -e POSTGRES_PASSWORD=*** postgres:16-alpine（%s%s）",
 			container, container, e2ePort, strings.TrimSpace(string(out)), err)
 	}
+}
+
+// TestRealPostgresBusinessDb 真机验证 query/exec 的 database 参数：带 database=myapp
+// 时读/写都落在业务库 myapp，缺省 database 仍读维护库 postgres，非法库名 E_INVALID。
+// 与 TestRealPostgres 同样默认跳过，复用同一容器与连接配置。
+func TestRealPostgresBusinessDb(t *testing.T) {
+	if os.Getenv("KORE_PG_E2E") != "1" {
+		t.Skip("设置 KORE_PG_E2E=1 并启动 postgres 容器后运行")
+	}
+	container := strings.TrimSpace(os.Getenv("KORE_PG_DOCKER_CONTAINER"))
+	if container == "" {
+		container = e2eContainer
+	}
+	requireContainer(t, container)
+
+	// 在容器内建业务库 + demo 表（独立于维护库 postgres）。
+	dockerExec(t, container, "psql", "-U", "postgres", "-d", "postgres", "-c", "DROP DATABASE IF EXISTS "+bizDB)
+	dockerExec(t, container, "psql", "-U", "postgres", "-d", "postgres", "-c", "CREATE DATABASE "+bizDB)
+	dockerExec(t, container, "psql", "-U", "postgres", "-d", bizDB, "-c",
+		"CREATE TABLE demo (id int PRIMARY KEY, name text NOT NULL)")
+	dockerExec(t, container, "psql", "-U", "postgres", "-d", bizDB, "-c",
+		"INSERT INTO demo (id, name) VALUES (1, 'alpha')")
+	defer func() {
+		dockerExec(t, container, "psql", "-U", "postgres", "-d", "postgres", "-c", "DROP DATABASE IF EXISTS "+bizDB)
+	}()
+
+	binary := buildPlugin(t)
+	conn := startPlugin(t, binary, container, t.TempDir())
+	defer func() { _ = conn.Close() }()
+	setParams := fmt.Sprintf(`{"values":{"host":"127.0.0.1","port":%d,"user":"postgres","password":"%s"}}`, e2ePort, e2ePassword)
+	result, perr := call(t, conn, "db-postgres.config.set", setParams)
+	mustOK(t, "config.set", result, perr)
+
+	// 1) database=myapp 读到业务库的 demo 行（postgres 库没有 demo 表，读到即证明切库生效）。
+	result, perr = call(t, conn, "db-postgres.query",
+		fmt.Sprintf(`{"instance":"default","database":%q,"sql":"SELECT id, name FROM demo ORDER BY id"}`, bizDB))
+	mustOK(t, "query database=myapp", result, perr)
+	got := decode[queryResult](t, result)
+	if got.RowCount != 1 || !strings.Contains(string(got.Rows[0]), `"name":"alpha"`) {
+		t.Fatalf("业务库读取异常: %s", result)
+	}
+
+	// 2) 缺省 database 读维护库 postgres：SELECT current_database() 必须是 postgres。
+	result, perr = call(t, conn, "db-postgres.query", `{"instance":"default","sql":"SELECT current_database() AS db"}`)
+	mustOK(t, "query 缺省库", result, perr)
+	got = decode[queryResult](t, result)
+	if !strings.Contains(string(got.Rows[0]), `"db":"postgres"`) {
+		t.Fatalf("缺省库回落异常: %s", result)
+	}
+
+	// 3) database=myapp 的 exec 写入落在业务库，容器内直读回验证（不经插件自证）。
+	result, perr = call(t, conn, "db-postgres.exec",
+		fmt.Sprintf(`{"instance":"default","database":%q,"sql":"INSERT INTO demo (id, name) VALUES (2, 'beta') RETURNING id","confirm":true}`, bizDB))
+	mustOK(t, "exec database=myapp", result, perr)
+	out := dockerExecOutput(t, container, "psql", "-U", "postgres", "-d", bizDB, "-tAc", "SELECT count(*) FROM demo")
+	if strings.TrimSpace(out) != "2" {
+		t.Fatalf("业务库写未落 myapp（count=%q）", strings.TrimSpace(out))
+	}
+
+	// 4) 非法库名 E_INVALID，且不触达数据库。
+	bad, badErr := call(t, conn, "db-postgres.query",
+		`{"instance":"default","database":"myapp;DROP TABLE demo","sql":"SELECT 1"}`)
+	if badErr == nil || badErr.Code != pluginapi.E_INVALID || bad != nil {
+		t.Fatalf("非法库名未被 E_INVALID 拒绝: result=%s err=%v", bad, badErr)
+	}
+	t.Logf("非法库名 → %s: %s", badErr.Code, badErr.Message)
+	// 5) 非法库名未触达数据库：容器内直读 myapp.demo 仍是 2 行（第 3 步写入的那行还在，未被 DROP）。
+	out = dockerExecOutput(t, container, "psql", "-U", "postgres", "-d", bizDB, "-tAc", "SELECT count(*) FROM demo")
+	if strings.TrimSpace(out) != "2" {
+		t.Fatalf("非法库名疑似触达数据库（myapp.demo count=%q）", strings.TrimSpace(out))
+	}
+	t.Logf("非法库名后 myapp.demo 行数=%s（未被改动）", strings.TrimSpace(out))
+}
+
+// dockerExecOutput 与 dockerExec 相同，但返回 stdout 供断言（失败即中止）。
+func dockerExecOutput(t *testing.T, container string, args ...string) string {
+	t.Helper()
+	full := append([]string{"exec", container}, args...)
+	out, err := exec.Command("docker", full...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("docker %v 失败: %v\n%s", full, err, out)
+	}
+	return string(out)
 }
 
 // seedTable 用容器内 psql 造一张验证表（插件只负责读）。

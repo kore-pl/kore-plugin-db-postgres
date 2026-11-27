@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pengtang1024/kore/pkg/pluginapi"
 )
 
 // TestPSQLArgsNoPassword 密码绝不进 argv：psql 参数里不能出现口令，口令只走环境变量。
@@ -163,20 +165,73 @@ func TestNormalizeColumns(t *testing.T) {
 // TestDockerTargetMapping docker 回退的本机端口映射：宿主机发布端口 → 容器内 5432。
 func TestDockerTargetMapping(t *testing.T) {
 	backend := &backend{kind: kindDocker, container: "kore-pg-test"}
-	target, perr := backend.dockerTarget(InstanceConfig{Name: "default", Host: "127.0.0.1", Port: 5432})
+	target, perr := backend.dockerTarget(InstanceConfig{Name: "default", Host: "127.0.0.1", Port: 5432}, defaultDatabase)
 	if perr != nil {
 		t.Fatalf("5432 直连不该报错: %v", perr)
 	}
 	if target.host != "127.0.0.1" || target.port != 5432 || target.database != "postgres" {
 		t.Fatalf("目标映射异常: %+v", target)
 	}
+	// 业务库名随 docker 目标一起映射，不再固定 postgres。
+	target, perr = backend.dockerTarget(InstanceConfig{Name: "default", Host: "127.0.0.1", Port: 5432}, "myapp")
+	if perr != nil || target.database != "myapp" {
+		t.Fatalf("业务库映射异常: %+v / %v", target, perr)
+	}
 	// 远程库按原样透传，不做本机映射。
-	target, perr = backend.dockerTarget(InstanceConfig{Name: "remote", Host: "db.example.com", Port: 6432})
+	target, perr = backend.dockerTarget(InstanceConfig{Name: "remote", Host: "db.example.com", Port: 6432}, defaultDatabase)
 	if perr != nil {
 		t.Fatalf("远程库不该报错: %v", perr)
 	}
 	if target.host != "db.example.com" || target.port != 6432 {
 		t.Fatalf("远程目标被改写: %+v", target)
+	}
+}
+
+// TestTargetForDatabase 目标库构造的两条通道：psql 直连用实例地址 + 给定库；
+// docker 回退也带业务库；空串回落维护库；非法库名 E_INVALID 且不带目标。
+func TestTargetForDatabase(t *testing.T) {
+	instance := InstanceConfig{Name: "default", Host: "127.0.0.1", Port: 15432, User: "postgres"}
+	psqlBackend := &backend{kind: kindPsql}
+	target, perr := (&Client{}).targetFor(instance, psqlBackend, "myapp")
+	if perr != nil || target.database != "myapp" || target.host != "127.0.0.1" || target.port != 15432 {
+		t.Fatalf("psql 业务库目标异常: %+v / %v", target, perr)
+	}
+	// 缺省回落。
+	target, perr = (&Client{}).targetFor(instance, psqlBackend, "")
+	if perr != nil || target.database != defaultDatabase {
+		t.Fatalf("缺省库回落异常: %+v / %v", target, perr)
+	}
+	// 注入：psql 元命令 / 空白 / 分号 / 选项前缀全部在目标构造处拒绝。
+	for _, bad := range []string{"myapp;DROP TABLE x", "my app", "-d postgres", `my"app`, "a\\connect x", "x' OR 1=1"} {
+		_, perr := (&Client{}).targetFor(instance, psqlBackend, bad)
+		if perr == nil || perr.Code != pluginapi.E_INVALID {
+			t.Fatalf("非法库名 %q 未被 E_INVALID 拒绝: %v", bad, perr)
+		}
+	}
+	// psql -d argv 真正带上了业务库（不是只改了结构体）。
+	appTarget, perr := (&Client{}).targetFor(instance, psqlBackend, "myapp")
+	if perr != nil {
+		t.Fatalf("业务库目标构造失败: %v", perr)
+	}
+	args := psqlArgs(appTarget, instance.User, "SELECT 1")
+	if !containsString(args, "myapp") || !strings.Contains(strings.Join(args, " "), "-d myapp") {
+		t.Fatalf("psql argv 未带 -d myapp: %v", args)
+	}
+}
+
+// TestResolveDatabaseWhitespace 空白只做 trim，不静默改写有效库名；非法名 E_INVALID。
+func TestResolveDatabaseWhitespace(t *testing.T) {
+	for _, valid := range []string{"myapp", " myapp ", "Demo_01"} {
+		got, perr := resolveDatabase(valid)
+		if perr != nil || got != strings.TrimSpace(valid) {
+			t.Fatalf("库名 %q 解析异常: %q / %v", valid, got, perr)
+		}
+	}
+	for _, bad := range []string{"my app", "app;DROP", "-x", "a-b", "a.b", `a"b`, "a'b", strings.Repeat("a", 64)} {
+		_, perr := resolveDatabase(bad)
+		if perr == nil || perr.Code != pluginapi.E_INVALID {
+			t.Fatalf("非法库名 %q 未被拒: %v", bad, perr)
+		}
 	}
 }
 

@@ -34,11 +34,15 @@ func callQuery(raw json.RawMessage, cfg Config, exec Executor) (json.RawMessage,
 	case limit < 0 || limit > maxQueryLimit:
 		return nil, invalid("limit 超出 0 到 1000 的范围，请改成范围内的值")
 	}
+	database, perr := resolveDatabase(p.Database)
+	if perr != nil {
+		return nil, perr
+	}
 	instance, perr := findInstance(cfg, p.Instance)
 	if perr != nil {
 		return nil, perr
 	}
-	result, err := exec.Query(instance, p.SQL, limit)
+	result, err := exec.Query(instance, p.SQL, database, limit)
 	if err != nil {
 		return nil, classify(err)
 	}

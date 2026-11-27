@@ -20,11 +20,11 @@ func (f faultExecutor) Databases(pgop.InstanceConfig, bool) ([]pgop.Database, er
 	return nil, pgop.NewFaultError(f.kind, "databases 执行面故障")
 }
 
-func (f faultExecutor) Query(pgop.InstanceConfig, string, int) (pgop.QueryResult, error) {
+func (f faultExecutor) Query(pgop.InstanceConfig, string, string, int) (pgop.QueryResult, error) {
 	return pgop.QueryResult{}, pgop.NewFaultError(f.kind, "query 执行面故障")
 }
 
-func (f faultExecutor) Exec(pgop.InstanceConfig, string, int) (pgop.QueryResult, error) {
+func (f faultExecutor) Exec(pgop.InstanceConfig, string, string, int) (pgop.QueryResult, error) {
 	return pgop.QueryResult{}, pgop.NewFaultError(f.kind, "exec 执行面故障")
 }
 

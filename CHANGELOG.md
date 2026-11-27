@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0 (2026-11-27)
+
+- feat: **补齐业务库选库能力**（此前 `defaultDatabase=postgres` 让所有 query/exec 固定在维护库，
+  用户管理业务库 myapp 时看不到也写不进——PG 无跨库限定名、sqlguard 又拒 `\connect`/多语句，
+  与 db-mysql 的选库能力形成真实对标差距）。`db-postgres.query` / `db-postgres.exec` 新增可选
+  `database` 入参：非空须过 `ValidateDatabaseName` 白名单（`^[a-zA-Z0-9_]{1,63}$`），再经
+  `targetFor/dockerTarget` 构造 `psql -d <database>` 目标；空串/缺省回落维护库 postgres，老调用不变。
+  psql 元命令禁令 / 多语句拒绝 / 两级确认 / 64 KiB 与副作用函数白名单全部不变；
+  **query 仍为 system:read、exec 仍为 system:admin，不放宽能力**。
+  instances/status/databases/slowlog 是实例级元数据，仍走维护库、不接 database 参数。
+- fix(web): 数据库页点库后，PG 的只读控制台 / 表列表 / 表结构查询与 SQL 写入面板都带
+  `database=S.selectedDb`（`web/db.js` + `web/db-postgres.js`），表列表与结构 SQL 追加
+  `table_catalog` / `table_schema` 过滤到所选库；写入面板用实时 getter 跟随点选，不新增一级控件。
+- security: database 参数在方法层 + 执行面双重校验白名单，非法库名（引号/分号/空白/选项前缀/
+  超长）返回 E_INVALID 且不触达 psql argv；口令仍只走 PGPASSWORD / stdin 首行，不进 argv。
+- test: 新增 query/exec 的 database 透传 / 缺省回落 / 注入拒绝单测，client 目标构造与
+  psql `-d myapp` argv 断言，E2E 补 `TestRealPostgresBusinessDb`（业务库读写 + 缺省回落 + 非法名）；
+  capability/methods 期望表保持 query=read / exec=admin 不变。
+- chore(release): 版本 bump 0.5.0 → 0.6.0（新增能力，minor）；dist 重打 + 索引四处同步重签。
+
 ## 0.5.0 (2026-11-27)
 
 - feat: **新增受控写方法 `db-postgres.exec`**（与 db-mysql.exec 对称，补齐 PG 侧对标缺口）——

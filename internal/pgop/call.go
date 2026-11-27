@@ -99,6 +99,24 @@ func findInstance(cfg Config, name string) (InstanceConfig, *pluginapi.Error) {
 	}
 }
 
+// resolveDatabase 校验可选的 database 入参（目标业务库）：空串回落维护库 postgres，
+// 非空必须过 ValidateDatabaseName 白名单（字母/数字/下划线 1..63），非法返回 E_INVALID。
+// psql 的 -d 直接吃这个名字，绝不接受引号 / 分号 / 空白 / 选项前缀，防 argv 与 SQL 注入。
+//
+// metadata 方法（instances/databases/status/slowlog）不接这个参数：它们查的是
+// pg_database / pg_stat_* 等实例级视图，连接哪个库结果都一样，走维护库即可；
+// 只有用户 SQL（query/exec）需要按库切换。
+func resolveDatabase(name string) (string, *pluginapi.Error) {
+	database := strings.TrimSpace(name)
+	if database == "" {
+		return defaultDatabase, nil
+	}
+	if err := ValidateDatabaseName(database); err != nil {
+		return "", invalid("database 需要是合法的库名（字母、数字、下划线，1-63 位）：" + err.Error())
+	}
+	return database, nil
+}
+
 // resolveInstance 按名字取实例；名字为空时优先 default，其次唯一实例，
 // 多于一个时要求显式指定。与 db-mysql 的 resolveInstance 同口径：
 // 备份/恢复这类「目录级」操作允许省略 instance（页面始终会带上当前选中的连接）。

@@ -105,10 +105,13 @@ type Config struct {
 type Executor interface {
 	Instances(instances []InstanceConfig) ([]InstanceStatus, error)
 	Databases(instance InstanceConfig, includeSystem bool) ([]Database, error)
-	Query(instance InstanceConfig, sql string, limit int) (QueryResult, error)
+	// Query / Exec 的 database 是本次调用的**目标业务库**（可选，空串回落配置维护库
+	// defaultDatabase）。PostgreSQL 无跨库限定名，必须靠 psql -d 切库；库名在方法层
+	// 过 ValidateDatabaseName 白名单后才到这里，执行面仍做一次纵深校验。
+	Query(instance InstanceConfig, sql string, database string, limit int) (QueryResult, error)
 	// Exec 执行一条写语句（INSERT/UPDATE/DELETE/MERGE 或 DDL），结果结构与 Query 相同：
 	// 写语句本身无结果集，但 PG 的 RETURNING 子句可以返回行，RowCount 为返回行数。
-	Exec(instance InstanceConfig, sql string, limit int) (QueryResult, error)
+	Exec(instance InstanceConfig, sql string, database string, limit int) (QueryResult, error)
 	Status(instance InstanceConfig) (StatusResult, error)
 
 	CreateDatabase(instance InstanceConfig, name, owner string) (bool, error)
@@ -177,18 +180,22 @@ type databasesParams struct {
 }
 
 // queryParams 是 db-postgres.query 的显式入参形状。
+// Database 可选：目标业务库名，缺省回落维护库 postgres（老调用不变）。
 type queryParams struct {
 	Instance string `json:"instance"`
 	SQL      string `json:"sql"`
+	Database string `json:"database"`
 	Limit    int    `json:"limit"`
 }
 
 // execParams 是 db-postgres.exec 的显式入参形状。
+// Database 可选：目标业务库名，缺省回落维护库 postgres（老调用不变）。
 // confirm 为 true 表示调用方已完成一次确认；ddl 级语句还要求 confirm_text 等于
 // 语句首两个关键字（如 "DROP TABLE"），由 ValidateWriteSQL 校验。
 type execParams struct {
 	Instance    string `json:"instance"`
 	SQL         string `json:"sql"`
+	Database    string `json:"database"`
 	Confirm     bool   `json:"confirm"`
 	ConfirmText string `json:"confirm_text"`
 }

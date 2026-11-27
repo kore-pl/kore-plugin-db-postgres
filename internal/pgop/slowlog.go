@@ -93,7 +93,7 @@ func callSlowlog(raw json.RawMessage, cfg Config, exec Executor) (json.RawMessag
 	case limit < 0 || limit > maxSlowLogLimit:
 		return nil, invalid(fmt.Sprintf("limit 必须在 0–%d 之间", maxSlowLogLimit))
 	}
-	result, err := exec.Query(instance, buildSlowQuerySQL(schema, p.MinMS, limit), limit)
+	result, err := exec.Query(instance, buildSlowQuerySQL(schema, p.MinMS, limit), defaultDatabase, limit)
 	if err != nil {
 		if isPgStatStatementsUnavailable(err) {
 			return encode(SlowLogResult{

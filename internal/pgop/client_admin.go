@@ -31,7 +31,7 @@ func (c *Client) scalarInt(instance InstanceConfig, sql string) (int64, error) {
 
 // firstRow 执行单行查询并返回第一行单元格（空结果集归 E_UPSTREAM）。
 func (c *Client) firstRow(instance InstanceConfig, sql string) ([]string, *OpError) {
-	stdout, perr := c.run(instance, sql, c.connectTimeout())
+	stdout, perr := c.run(instance, defaultDatabase, sql, c.connectTimeout())
 	if perr != nil {
 		return nil, perr
 	}
@@ -63,7 +63,7 @@ func roleFlagsSQL(user string) string {
 
 // execDDL 执行一条 DDL/DCL（SQL 只走 stdin）。
 func (c *Client) execDDL(instance InstanceConfig, sql string) *OpError {
-	_, perr := c.runStdin(instance, sql, c.queryTimeout())
+	_, perr := c.runStdin(instance, defaultDatabase, sql, c.queryTimeout())
 	return perr
 }
 

@@ -93,7 +93,7 @@ func (c *Client) probe(instance InstanceConfig) InstanceStatus {
 	status := InstanceStatus{Name: instance.Name, Host: instance.Host, Port: instance.Port}
 	// 凭据来源只报「从哪来」，绝不回显口令本身（G-30）。
 	_, status.CredentialSource = resolveCredential(instance)
-	stdout, perr := c.run(instance, "SELECT version()", c.connectTimeout())
+	stdout, perr := c.run(instance, defaultDatabase, "SELECT version()", c.connectTimeout())
 	if perr != nil {
 		status.Error = perr.Message
 		return status
@@ -127,7 +127,7 @@ func (c *Client) Databases(instance InstanceConfig, includeSystem bool) ([]Datab
 		query += " WHERE NOT datistemplate"
 	}
 	query += " ORDER BY datname"
-	stdout, perr := c.run(instance, query, c.connectTimeout())
+	stdout, perr := c.run(instance, defaultDatabase, query, c.connectTimeout())
 	if perr != nil {
 		return nil, perr
 	}
@@ -169,7 +169,7 @@ const statusQuery = `SELECT
 
 // Status 读取版本 / 连接数 / 库数 / 运行时长 / 缓存命中率。
 func (c *Client) Status(instance InstanceConfig) (StatusResult, error) {
-	stdout, perr := c.run(instance, statusQuery, c.connectTimeout())
+	stdout, perr := c.run(instance, defaultDatabase, statusQuery, c.connectTimeout())
 	if perr != nil {
 		return StatusResult{}, perr
 	}
@@ -198,8 +198,13 @@ func (c *Client) Status(instance InstanceConfig) (StatusResult, error) {
 }
 
 // Query 执行只读 SQL 并读取结果：最多 limit 行，单格 ≤8 KiB，总行数据 ≤8 MiB。
-func (c *Client) Query(instance InstanceConfig, sql string, limit int) (QueryResult, error) {
-	stdout, perr := c.run(instance, sql, c.queryTimeout())
+// database 为空时回落维护库（调用方已解析，这里再挡一次纵深校验）。
+func (c *Client) Query(instance InstanceConfig, sql, database string, limit int) (QueryResult, error) {
+	database, perrDB := resolveDatabase(database)
+	if perrDB != nil {
+		return QueryResult{}, perrDB
+	}
+	stdout, perr := c.run(instance, database, sql, c.queryTimeout())
 	if perr != nil {
 		return QueryResult{}, perr
 	}
@@ -225,8 +230,12 @@ func (c *Client) Query(instance InstanceConfig, sql string, limit int) (QueryRes
 // 字面量（甚至口令改密），进 argv 会暴露在本机 ps / docker 命令行里。
 // psql 的 --csv / -P null / ON_ERROR_STOP 等参数与只读通道一致，RETURNING 的行
 // 按 CSV 解析进 QueryResult，RowCount 为返回行数；无 RETURNING 时返回空数组。
-func (c *Client) Exec(instance InstanceConfig, sql string, limit int) (QueryResult, error) {
-	stdout, perr := c.runStdin(instance, sql, c.queryTimeout())
+func (c *Client) Exec(instance InstanceConfig, sql, database string, limit int) (QueryResult, error) {
+	database, perrDB := resolveDatabase(database)
+	if perrDB != nil {
+		return QueryResult{}, perrDB
+	}
+	stdout, perr := c.runStdin(instance, database, sql, c.queryTimeout())
 	if perr != nil {
 		return QueryResult{}, perr
 	}
@@ -263,7 +272,8 @@ func (c *Client) queryTimeout() time.Duration {
 }
 
 // run 执行一次 psql 调用并返回 stdout；错误映射为带协议码的 OpError。
-func (c *Client) run(instance InstanceConfig, sql string, timeout time.Duration) ([]byte, *OpError) {
+// database 是 psql -d 的目标库（已过白名单），不拼进 SQL 字符串。
+func (c *Client) run(instance InstanceConfig, database, sql string, timeout time.Duration) ([]byte, *OpError) {
 	password := instancePassword(instance)
 	for attempt := 0; ; attempt++ {
 		backend, perr := c.resolved()
@@ -271,7 +281,7 @@ func (c *Client) run(instance InstanceConfig, sql string, timeout time.Duration)
 			return nil, perr
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		stdout, stderr, err := c.exec(ctx, backend, instance, password, sql, timeout)
+		stdout, stderr, err := c.exec(ctx, backend, instance, database, password, sql, timeout)
 		ctxErr := ctx.Err()
 		cancel()
 		if err == nil {
@@ -295,7 +305,7 @@ func (c *Client) run(instance InstanceConfig, sql string, timeout time.Duration)
 //
 // psql 在既没有 -c 也没有 -f 时从 stdin 读命令；docker 模式下包装脚本先读走第一行
 // （口令）再 exec psql，剩余 stdin 就是 SQL——两条通道都不把口令放进 argv。
-func (c *Client) runStdin(instance InstanceConfig, sql string, timeout time.Duration) ([]byte, *OpError) {
+func (c *Client) runStdin(instance InstanceConfig, database, sql string, timeout time.Duration) ([]byte, *OpError) {
 	password := instancePassword(instance)
 	backend, perr := c.resolved()
 	if perr != nil {
@@ -303,7 +313,7 @@ func (c *Client) runStdin(instance InstanceConfig, sql string, timeout time.Dura
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	stdout, stderr, err := c.execStdin(ctx, backend, instance, password, sql, timeout)
+	stdout, stderr, err := c.execStdin(ctx, backend, instance, database, password, sql, timeout)
 	ctxErr := ctx.Err()
 	cancel()
 	if err == nil {
@@ -316,8 +326,8 @@ func (c *Client) runStdin(instance InstanceConfig, sql string, timeout time.Dura
 }
 
 // execStdin 构造并执行「SQL 从 stdin 读」的子进程。
-func (c *Client) execStdin(ctx context.Context, backend *backend, instance InstanceConfig, password, sql string, timeout time.Duration) ([]byte, string, error) {
-	target, perr := c.targetFor(instance, backend)
+func (c *Client) execStdin(ctx context.Context, backend *backend, instance InstanceConfig, database, password, sql string, timeout time.Duration) ([]byte, string, error) {
+	target, perr := c.targetFor(instance, backend, database)
 	if perr != nil {
 		return nil, "", perr
 	}
@@ -341,16 +351,25 @@ func (c *Client) execStdin(ctx context.Context, backend *backend, instance Insta
 }
 
 // targetFor 计算本次调用的 psql 目标地址（docker 模式按容器内地址映射）。
-func (c *Client) targetFor(instance InstanceConfig, backend *backend) (psqlTarget, *OpError) {
-	if backend.kind != kindDocker {
-		return psqlTarget{host: instance.Host, port: instance.Port, database: defaultDatabase}, nil
+// database 是本次 SQL 的目标业务库；空串回落维护库，非空必须过 ValidateDatabaseName
+// 白名单——它直接进 psql -d argv，绝不接受引号 / 分号 / 空白 / "-" 前缀。
+func (c *Client) targetFor(instance InstanceConfig, backend *backend, database string) (psqlTarget, *OpError) {
+	database = strings.TrimSpace(database)
+	if database == "" {
+		database = defaultDatabase
 	}
-	return backend.dockerTarget(instance)
+	if err := ValidateDatabaseName(database); err != nil {
+		return psqlTarget{}, opErrorf(pluginapi.E_INVALID, "database 参数非法：%v", err)
+	}
+	if backend.kind != kindDocker {
+		return psqlTarget{host: instance.Host, port: instance.Port, database: database}, nil
+	}
+	return backend.dockerTarget(instance, database)
 }
 
 // exec 构造并执行子进程，返回 stdout 与 stderr 文本。
-func (c *Client) exec(ctx context.Context, backend *backend, instance InstanceConfig, password, sql string, timeout time.Duration) ([]byte, string, error) {
-	target, perr := c.targetFor(instance, backend)
+func (c *Client) exec(ctx context.Context, backend *backend, instance InstanceConfig, database, password, sql string, timeout time.Duration) ([]byte, string, error) {
+	target, perr := c.targetFor(instance, backend, database)
 	if perr != nil {
 		return nil, "", perr
 	}
@@ -548,20 +567,23 @@ func discoverPostgresContainer(dockerBin string) (string, error) {
 // 典型场景：postgres 跑在容器里、只发布到宿主机 15432（-p 15432:5432），而容器内部
 // 监听 5432。此时在容器里必须连 127.0.0.1:5432，直连 15432 会 connection refused。
 // 非本机目标（远程库）按原样透传。
-func (b *backend) dockerTarget(instance InstanceConfig) (psqlTarget, *OpError) {
+func (b *backend) dockerTarget(instance InstanceConfig, database string) (psqlTarget, *OpError) {
+	if database == "" {
+		database = defaultDatabase
+	}
 	if !isLocalHost(instance.Host) {
-		return psqlTarget{host: instance.Host, port: instance.Port, database: defaultDatabase}, nil
+		return psqlTarget{host: instance.Host, port: instance.Port, database: database}, nil
 	}
 	// 5432 是容器内 PostgreSQL 自己的端口：无需查询端口映射，直接回环访问。
 	if instance.Port == 5432 {
-		return psqlTarget{host: "127.0.0.1", port: 5432, database: defaultDatabase}, nil
+		return psqlTarget{host: "127.0.0.1", port: 5432, database: database}, nil
 	}
 	published, perr := b.publishedPorts()
 	if perr != nil {
 		return psqlTarget{}, perr
 	}
 	if hostPort, ok := published[5432]; ok && hostPort == instance.Port {
-		return psqlTarget{host: "127.0.0.1", port: 5432, database: defaultDatabase}, nil
+		return psqlTarget{host: "127.0.0.1", port: 5432, database: database}, nil
 	}
 	return psqlTarget{}, opErrorf(pluginapi.E_INVALID,
 		"容器 %s 内部的 PostgreSQL 只监听 5432（宿主机发布端口 %s）：请把实例端口改成该发布端口，"+
