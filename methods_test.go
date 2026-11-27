@@ -299,6 +299,7 @@ func TestInfoMethodCapabilities(t *testing.T) {
 		"db-postgres.instances":  "system:read",
 		"db-postgres.databases":  "system:read",
 		"db-postgres.query":      "system:read",
+		"db-postgres.exec":       "system:admin",
 		"db-postgres.status":     "system:read",
 		"db-postgres.slowlog":    "system:read",
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.0 (2026-11-27)
+
+- feat: **新增受控写方法 `db-postgres.exec`**（与 db-mysql.exec 对称，补齐 PG 侧对标缺口）——
+  写入两级确认 + 白名单 + 结构化结果：data 级（INSERT/UPDATE/DELETE/MERGE）勾 confirm=true 即可；
+  ddl 级（DROP/TRUNCATE/ALTER/CREATE/RENAME/GRANT/REVOKE/REINDEX/CLUSTER/VACUUM/ANALYZE/SET/RESET/COMMENT）
+  还须手打首两个关键字作为 confirm_text；单条语句 / 64 KiB / NUL / 反斜杠 psql 元命令 / 嵌套块注释
+  清洗 / COPY ... PROGRAM 侧信道 / pg_sleep·dblink·pg_read_file 等副作用函数全部 fail-closed 拒绝；
+  首关键字白名单按 PG 方言调整（无 REPLACE / 有 MERGE、REINDEX / CLUSTER / VACUUM）。
+  写语句经 psql stdin 执行（不进 argv/ps），`RETURNING` 的行进 ExecResult.Columns/Rows，
+  `row_count` = 返回行数。方法级能力 exec=system:admin，query 仍为 system:read（不放开只读操作员写权），
+  内核 invoke 审计按 admin 类自动覆盖；不接内核 confirm-token（两级确认够用）。
+- test: 新增 `internal/pgop/writeguard.go` 单测（正常写 / 拒多语句 / DDL 确认短语 / COPY PROGRAM /
+  副作用函数 / 注入）+ `capability_test.go` 期望表 + callExec 无 admin→E_UNAUTHORIZED 断言；
+  fault 执行面注入补 exec 方法，main_test/methods_test 期望表同步。
+- chore(release): 版本 bump 0.4.2 → 0.5.0（新增方法面，minor）；前端 db.js 的 SQL 写入折叠面板
+  对 PostgreSQL 开放（按需注入新增的 web/db-postgres.js，预设按 PG 语法含 RETURNING），首屏预算不变。
+
 ## 0.4.2 (2026-11-26)
 
 - fix(ux): 按 G-33 A3 清理 28 条 `invalid()` 错误文案（call.go / identifiers.go / query.go / sqlguard.go / methods.go），

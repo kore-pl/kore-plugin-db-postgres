@@ -9,7 +9,7 @@ import (
 	"github.com/pengtang1024/kore/pkg/pluginapi"
 )
 
-// faultExecutor 在十一个真实方法上注入同一类故障，验证「故障 → 协议码」映射。
+// faultExecutor 在十二个真实方法上注入同一类故障，验证「故障 → 协议码」映射。
 type faultExecutor struct{ kind pgop.FaultKind }
 
 func (f faultExecutor) Instances([]pgop.InstanceConfig) ([]pgop.InstanceStatus, error) {
@@ -22,6 +22,10 @@ func (f faultExecutor) Databases(pgop.InstanceConfig, bool) ([]pgop.Database, er
 
 func (f faultExecutor) Query(pgop.InstanceConfig, string, int) (pgop.QueryResult, error) {
 	return pgop.QueryResult{}, pgop.NewFaultError(f.kind, "query 执行面故障")
+}
+
+func (f faultExecutor) Exec(pgop.InstanceConfig, string, int) (pgop.QueryResult, error) {
+	return pgop.QueryResult{}, pgop.NewFaultError(f.kind, "exec 执行面故障")
 }
 
 func (f faultExecutor) Status(pgop.InstanceConfig) (pgop.StatusResult, error) {
@@ -60,7 +64,7 @@ func (f faultExecutor) Restore(pgop.InstanceConfig, pgop.RestoreSpec) error {
 	return pgop.NewFaultError(f.kind, "restore 执行面故障")
 }
 
-// assertFault 对十一个真实方法断言同一类故障的协议码与关键词。
+// assertFault 对十二个真实方法断言同一类故障的协议码与关键词。
 func assertFault(t *testing.T, kind pgop.FaultKind, wantCode, wantHint string) {
 	t.Helper()
 	cfg := pgop.Config{
@@ -76,6 +80,7 @@ func assertFault(t *testing.T, kind pgop.FaultKind, wantCode, wantHint string) {
 		{"db-postgres.instances", `{}`},
 		{"db-postgres.databases", `{"instance":"default"}`},
 		{"db-postgres.query", `{"instance":"default","sql":"SELECT 1"}`},
+		{"db-postgres.exec", `{"instance":"default","sql":"UPDATE t SET a=1","confirm":true}`},
 		{"db-postgres.status", `{"instance":"default"}`},
 		{"db-postgres.slowlog", `{"instance":"default"}`},
 		{"db-postgres.createDatabase", `{"instance":"default","name":"kore_fault"}`},

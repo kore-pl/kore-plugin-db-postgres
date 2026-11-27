@@ -164,7 +164,7 @@ func TestServeMethods(t *testing.T) {
 	}
 	write("a", "db-postgres.config.get", `{}`, "")
 	write("b", "db-postgres.query", `{"instance":"default","sql":"DROP TABLE x"}`, pluginapi.E_INVALID)
-	write("c", "db-postgres.exec", `{}`, pluginapi.E_NOTFOUND)
+	write("c", "db-postgres.exec", `{}`, pluginapi.E_INVALID)
 
 	// 收尾 shutdown 也配对读帧。
 	write("d", "kore.shutdown", `{}`, "")

@@ -59,6 +59,13 @@ func (f *fakeExec) Query(instance InstanceConfig, sql string, limit int) (QueryR
 	return f.query, f.err
 }
 
+// Exec 记录写语句入参（与 Query 共用 gotSQL/gotLimit 与 query 预设），
+// 供 callExec 单测断言「拒绝路径不触达执行面」与「合法写语句执行参数正确」。
+func (f *fakeExec) Exec(instance InstanceConfig, sql string, limit int) (QueryResult, error) {
+	f.gotSQL, f.gotLimit = sql, limit
+	return f.query, f.err
+}
+
 func (f *fakeExec) Status(instance InstanceConfig) (StatusResult, error) { return f.status, f.err }
 
 // --- 写方法：记录入参，返回预设结果（call_test 里用于校验方法层防线）---
@@ -365,7 +372,7 @@ func TestCallFault(t *testing.T) {
 
 // TestCallUnknown 未知方法 / 旧域前缀 / 已移除的 connections 都返回 E_NOTFOUND。
 func TestCallUnknown(t *testing.T) {
-	for _, method := range []string{"db-postgres.exec", "pg.instances", "db-postgres.connections", "db-postgres."} {
+	for _, method := range []string{"pg.instances", "db-postgres.connections", "db-postgres."} {
 		if _, perr := Call(method, json.RawMessage(`{}`), testConfig(), &fakeExec{}); perr == nil || perr.Code != pluginapi.E_NOTFOUND {
 			t.Fatalf("方法 %q 错误=%v，期望 E_NOTFOUND", method, perr)
 		}
@@ -374,7 +381,7 @@ func TestCallUnknown(t *testing.T) {
 
 // TestBusinessVerb 方法名归一化：只接受 db-postgres.<4 个动词>。
 func TestBusinessVerb(t *testing.T) {
-	for _, verb := range []string{"instances", "databases", "query", "status"} {
+	for _, verb := range []string{"instances", "databases", "query", "exec", "status"} {
 		got, ok := businessVerb("db-postgres." + verb)
 		if !ok || got != verb {
 			t.Fatalf("businessVerb(%q)=(%q,%v)", verb, got, ok)

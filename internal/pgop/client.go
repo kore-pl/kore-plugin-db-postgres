@@ -219,6 +219,33 @@ func (c *Client) Query(instance InstanceConfig, sql string, limit int) (QueryRes
 	}, nil
 }
 
+// Exec 执行一条写语句（由 callExec 完成白名单与两级确认后才到这里）。
+//
+// 与 Query 的关键差异：SQL 走 runStdin 从 stdin 进 psql，不进 argv —— 写语句常带
+// 字面量（甚至口令改密），进 argv 会暴露在本机 ps / docker 命令行里。
+// psql 的 --csv / -P null / ON_ERROR_STOP 等参数与只读通道一致，RETURNING 的行
+// 按 CSV 解析进 QueryResult，RowCount 为返回行数；无 RETURNING 时返回空数组。
+func (c *Client) Exec(instance InstanceConfig, sql string, limit int) (QueryResult, error) {
+	stdout, perr := c.runStdin(instance, sql, c.queryTimeout())
+	if perr != nil {
+		return QueryResult{}, perr
+	}
+	columns, cells, truncated, err := parseCSV(stdout, limit, maxCellBytes)
+	if err != nil {
+		return QueryResult{}, opErrorf(pluginapi.E_INTERNAL, "解析写入结果失败: %v", err)
+	}
+	rows, budgetCut, err := buildRows(columns, cells, maxResultBytes)
+	if err != nil {
+		return QueryResult{}, opErrorf(pluginapi.E_INTERNAL, "编码写入结果失败: %v", err)
+	}
+	return QueryResult{
+		Columns:   columns,
+		Rows:      rows,
+		RowCount:  len(rows),
+		Truncated: truncated || budgetCut || len(rows) < len(cells),
+	}, nil
+}
+
 // connectTimeout 返回元数据方法的整体预算（缺省 5s）。
 func (c *Client) connectTimeout() time.Duration {
 	if c.cfg.ConnectTimeout > 0 {

@@ -106,6 +106,9 @@ type Executor interface {
 	Instances(instances []InstanceConfig) ([]InstanceStatus, error)
 	Databases(instance InstanceConfig, includeSystem bool) ([]Database, error)
 	Query(instance InstanceConfig, sql string, limit int) (QueryResult, error)
+	// Exec 执行一条写语句（INSERT/UPDATE/DELETE/MERGE 或 DDL），结果结构与 Query 相同：
+	// 写语句本身无结果集，但 PG 的 RETURNING 子句可以返回行，RowCount 为返回行数。
+	Exec(instance InstanceConfig, sql string, limit int) (QueryResult, error)
 	Status(instance InstanceConfig) (StatusResult, error)
 
 	CreateDatabase(instance InstanceConfig, name, owner string) (bool, error)
@@ -178,6 +181,28 @@ type queryParams struct {
 	Instance string `json:"instance"`
 	SQL      string `json:"sql"`
 	Limit    int    `json:"limit"`
+}
+
+// execParams 是 db-postgres.exec 的显式入参形状。
+// confirm 为 true 表示调用方已完成一次确认；ddl 级语句还要求 confirm_text 等于
+// 语句首两个关键字（如 "DROP TABLE"），由 ValidateWriteSQL 校验。
+type execParams struct {
+	Instance    string `json:"instance"`
+	SQL         string `json:"sql"`
+	Confirm     bool   `json:"confirm"`
+	ConfirmText string `json:"confirm_text"`
+}
+
+// ExecResult 是 db-postgres.exec 的结构化结果。
+// Columns/Rows 来自写语句的 RETURNING 子句（无 RETURNING 时为空数组），
+// RowCount = len(Rows)，与 db-mysql.exec 同形状。
+type ExecResult struct {
+	Instance string            `json:"instance"`
+	Kind     string            `json:"kind"`
+	Executed bool              `json:"executed"`
+	Columns  []string          `json:"columns"`
+	Rows     []json.RawMessage `json:"rows"`
+	RowCount int               `json:"row_count"`
 }
 
 // statusParams 是 db-postgres.status 的显式入参形状。

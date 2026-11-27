@@ -1,7 +1,7 @@
 {
   "id": "db-postgres",
   "name": "PostgreSQL 管理插件",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "protocol": "kore.plugin.v1",
   "lifecycle": "lazy",
   "depth_level": "basic",
@@ -14,6 +14,7 @@
     "db-postgres.instances": "system:read",
     "db-postgres.databases": "system:read",
     "db-postgres.query": "system:read",
+    "db-postgres.exec": "system:admin",
     "db-postgres.status": "system:read",
     "db-postgres.slowlog": "system:read",
     "db-postgres.config.set": "system:admin",
@@ -43,5 +44,5 @@
   "scenario_tags": [
     "data"
   ],
-  "size_bytes": 1671262
+  "size_bytes": 1676082
 }

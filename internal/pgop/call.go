@@ -30,6 +30,8 @@ func Call(method string, params json.RawMessage, cfg Config, exec Executor) (jso
 		return callDatabases(params, cfg, exec)
 	case "query":
 		return callQuery(params, cfg, exec)
+	case "exec":
+		return callExec(params, cfg, exec)
 	case "status":
 		return callStatus(params, cfg, exec)
 	case "slowlog":
@@ -70,7 +72,7 @@ func businessVerb(method string) (string, bool) {
 		return "", false
 	}
 	switch verb {
-	case "instances", "databases", "query", "status", "slowlog",
+	case "instances", "databases", "query", "exec", "status", "slowlog",
 		"createDatabase", "dropDatabase", "createUser", "dropUser", "grant", "changePassword",
 		"backup", "restore", "backupList", "backupDelete", "backupDownload":
 		return verb, true
